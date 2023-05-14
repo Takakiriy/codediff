@@ -5,7 +5,13 @@ ThisScriptParentPath="$( readlink -f "${0%/*}" )"
 #    diff tool for Visual Studio Code git diff mode
 
 WorkingFolderPathDefault="$HOME/_tmp/_diff/1"
-VisualStudioCodePath="/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"
+if [ -e "/Applications/Visual Studio Code.app" ]; then
+    VisualStudioCodePath="/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"
+elif [ -e "${HOME}/AppData/Local/Programs/Microsoft VS Code" ]; then
+    VisualStudioCodePath="${HOME}/AppData/Local/Programs/Microsoft VS Code/bin/code"
+else
+    VisualStudioCodePath="__NotFoundVisualStudioCode"
+fi
 
 PositionalArgs=()
 while [[ $# -gt 0 ]]; do
