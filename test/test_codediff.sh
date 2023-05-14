@@ -14,13 +14,15 @@ set -- "${PositionalArgs[@]}"  #// set $1, $2, ...
 unset PositionalArgs
 
 function  Main() {
-    TestFirstCase
+    TestLocal
+    TestGitRepository
+    TestGitRepositorySubFolder
     EndOfTest
 }
 
-function  TestFirstCase() {
+function  TestLocal() {
     echo  ""
-    echo  "TestFirstCase =================================="
+    echo  "TestLocal =================================="
     local  workingFolderPath="$HOME/_tmp/_diff/1"
 
     #// 1st command
@@ -29,7 +31,7 @@ function  TestFirstCase() {
     Pause  "Next: Check opening a folder that contains .codediff.ini file."
 
     ../codediff  ${TestOption}
-    if [ "$( cat "${workingFolderPath}/.codediff.ini" )" != "$( cat "../codediff_template.ini" )" ]; then  TestError  "TestFirstCase 1"  ;fi
+    if [ "$( cat "${workingFolderPath}/.codediff.ini" )" != "$( cat "../codediff_template.ini" )" ]; then  TestError  "1"  ;fi
     AssertNotExist  "${workingFolderPath}/working"
     Pause  "OK?"
 
@@ -38,15 +40,56 @@ function  TestFirstCase() {
     Pause  "Next: Check opening the working folder."
 
     ../codediff  ${TestOption}
-    if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "a2" ]; then  TestError  "TestFirstCase 2"  ;fi
+    if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "a2" ]; then  TestError  "2"  ;fi
     Pause  "OK?"
     ChangeToOldCommit
-    if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "a1" ]; then  TestError  "TestFirstCase 3"  ;fi
+    if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "a1" ]; then  TestError  "3"  ;fi
+    rm -rf  "$HOME/_tmp/_diff"
+    rm -f  "_codediff.log"
+}
+
+function  TestGitRepository() {
+    echo  ""
+    echo  "TestGitRepository =================================="
+    local  workingFolderPath="$HOME/_tmp/_diff/1"
+    rm -rf  "$HOME/_tmp/_diff"
+    rm -f  "_codediff.log"
+
+    CopyIniFileTemplate  "files/2_repository_codediff.ini"  "${workingFolderPath}"
+    Pause  "Next: Check opening the working folder."
+
+    ../codediff  ${TestOption}
+    if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "git a2" ]; then  TestError  "2"  ;fi
+    Pause  "OK?"
+    ChangeToOldCommit
+    if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "git a1" ]; then  TestError  "3"  ;fi
+    rm -rf  "$HOME/_tmp/_diff"
+    rm -f  "_codediff.log"
+}
+
+function  TestGitRepositorySubFolder() {
+    echo  ""
+    echo  "TestGitRepositorySubFolder =================================="
+    local  workingFolderPath="$HOME/_tmp/_diff/1"
+    rm -rf  "$HOME/_tmp/_diff"
+    rm -f  "_codediff.log"
+
+    CopyIniFileTemplate  "files/3_sub_folder_codediff.ini"  "${workingFolderPath}"
+    Pause  "Next: Check opening the working folder."
+
+    ../codediff  ${TestOption}
+    if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "git sub 2" ]; then  TestError  "2"  ;fi
+    Pause  "OK?"
+    ChangeToOldCommit
+    if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "git sub 1" ]; then  TestError  "3"  ;fi
+    rm -rf  "$HOME/_tmp/_diff"
+    rm -f  "_codediff.log"
 }
 
 function  CopyIniFileTemplate() {
     local  templatePath="$1"
     local  workingFolderPath="$2"
+    mkdir -p  "${workingFolderPath}"
 
     cat  "${templatePath}"  |  sed -E "s|__Project__|${ProjectPath}|"  > "${workingFolderPath}/.codediff.ini"
 }

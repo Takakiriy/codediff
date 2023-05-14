@@ -122,6 +122,7 @@ function  OpenIDE() {
     if [ "${Options_Test}" != "" ]; then
         echo  "OpenIDE \"${openingFolderPath}\""  >  "_codediif.log"
     else
+        echo  "codediff: \"${openingFolderPath}\""
 
         "${VisualStudioCodePath}" -g  "${openingFolderPath}"
     fi
