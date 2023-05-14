@@ -41,6 +41,7 @@ function  TestLocal() {
 
     ../codediff  ${TestOption}
     if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "a2" ]; then  TestError  "2"  ;fi
+    AssertReadOnly  "${workingFolderPath}/working/a.txt"
     Pause  "OK?"
     ChangeToOldCommit
     if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "a1" ]; then  TestError  "3"  ;fi
@@ -60,6 +61,7 @@ function  TestGitRepository() {
 
     ../codediff  ${TestOption}
     if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "git a2" ]; then  TestError  "2"  ;fi
+    AssertReadOnly  "${workingFolderPath}/working/a.txt"
     Pause  "OK?"
     ChangeToOldCommit
     if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "git a1" ]; then  TestError  "3"  ;fi
@@ -79,6 +81,7 @@ function  TestGitRepositorySubFolder() {
 
     ../codediff  ${TestOption}
     if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "git sub 2" ]; then  TestError  "2"  ;fi
+    AssertReadOnly  "${workingFolderPath}/working/a.txt"
     Pause  "OK?"
     ChangeToOldCommit
     if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "git sub 1" ]; then  TestError  "3"  ;fi
@@ -121,6 +124,18 @@ function  AssertNotExist() {
     fi
 }
 
+function  AssertReadOnly() {
+    local  path="$1"
+    local  writable=${False}
+
+    local  attributes="$(ls -la "${path}")"
+    echo "${attributes:0:10}" | grep w  > /dev/null  &&  writable=${True}
+
+    if [ "${writable}" == "${True}" ]; then
+        Error  "ERROR: Not read only file \"${path}\""
+    fi
+}
+
 function  Error() {
     local  errorMessage="$1"
     local  exitCode="$2"
@@ -155,6 +170,8 @@ function  EndOfTest() {
     fi
 }
 
+True=0
+False=1
 if [ "${Options_ManualTest}" != "" ]; then
     TestOption=""
 else

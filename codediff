@@ -114,13 +114,15 @@ function  CreateNewGitWorking() {
 
     git checkout "."  > /dev/null  2>&1
     git reset --soft HEAD^
+    find "." -type f  |  xargs  -I {} \
+        chmod 444 "{}"
     popd  > /dev/null
 }
 
 function  OpenIDE() {
     local  openingFolderPath="$1"
     if [ "${Options_Test}" != "" ]; then
-        echo  "OpenIDE \"${openingFolderPath}\""  >  "_codediif.log"
+        echo  "OpenIDE \"${openingFolderPath}\""  >  "_codediff.log"
     else
         echo  "codediff: \"${openingFolderPath}\""
 
