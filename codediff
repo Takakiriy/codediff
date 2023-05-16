@@ -28,13 +28,13 @@ function  Main() {
     local  workingFolderPath="${WorkingFolderPathDefault}"
     if [ ! -e "${workingFolderPath}/.codediff.ini" ]; then
         MakeWorkingFolderIfNot  "${workingFolderPath}"
-        OpenIDE  "${workingFolderPath}"
+        OpenIDE  "${workingFolderPath}"  "${workingFolderPath}/.codediff.ini"
     else
         ParseIniFile  "${workingFolderPath}/.codediff.ini"
         CreateWorkingFiles  0  "${workingFolderPath}/working_0"
         CreateWorkingFiles  1  "${workingFolderPath}/working_1"
         CreateNewGitWorking  "${workingFolderPath}/working_0"  "${workingFolderPath}/working_1"
-        OpenIDE  "${workingFolderPath}/working"
+        OpenIDE  "${workingFolderPath}/working"  "${workingFolderPath}/.codediff.ini"
     fi
 }
 
@@ -77,7 +77,7 @@ function  CreateWorkingFiles() {
         else
             git clone  --filter=blob:none --sparse  "${repositoryURL}" ${options} \
                 "${WorkingFolderPathDefault}/workingOfWorking"  ||  Error
-            pushd  "${WorkingFolderPathDefault}/workingOfWorking"  > /dev/null
+            pushd  "${WorkingFolderPathDefault}/workingOfWorking"  > /dev/null  ||  Error
 
             git sparse-checkout set "${baseRelativePath}"
             popd  > /dev/null
@@ -87,6 +87,14 @@ function  CreateWorkingFiles() {
             rm -rf  "${WorkingFolderPathDefault}/workingOfWorking"
         fi
     fi
+
+    local  deletingPath=""
+    for  deletingPath  in "${Setting_DeleteRelativePath[@]}"; do
+        pushd  "${outputFolderPath}"  > /dev/null  ||  Error
+
+        rm -rf  "${deletingPath}"
+        popd  > /dev/null
+    done
 }
 
 function  CreateNewGitWorking() {
@@ -120,19 +128,22 @@ function  CreateNewGitWorking() {
 
     git checkout "."  > /dev/null  2>&1
     git reset --soft HEAD^
+    mv  ".git"  ".."
     find "." -type f  |  xargs  -I {} \
         chmod 444 "{}"
+    mv  "../.git"  "."
     popd  > /dev/null
 }
 
 function  OpenIDE() {
     local  openingFolderPath="$1"
+    local  secondPath="$2"
     if [ "${Options_Test}" != "" ]; then
         echo  "OpenIDE \"${openingFolderPath}\""  >  "_codediff.log"
     else
         echo  "codediff: \"${openingFolderPath}\""
 
-        "${VisualStudioCodePath}" -g  "${openingFolderPath}"
+        "${VisualStudioCodePath}" -g  "${openingFolderPath}"  "${secondPath}"
     fi
 }
 
@@ -179,6 +190,8 @@ function  ParseIniFile() {
                 branchOrTag="${value}"
             elif [ "${name}" == "BaseRelativePath" ]; then
                 baseRelativePath="${value}"
+            elif [ "${name}" == "DeleteRelativePath" ]; then
+                Setting_DeleteRelativePath+=("${value}")
             else
                 Error  "ERROR: Unknown parameter: ${name}."
             fi
@@ -197,6 +210,7 @@ function  ResetSetting() {
     Setting_RepositoryURL=( )
     Setting_BranchOrTag=( )
     Setting_BaseRelativePath=( )
+    Setting_DeleteRelativePath=( )
 }
 
 function  AppendSetting() {
@@ -395,5 +409,6 @@ Setting_LocalFullPath=( )
 Setting_RepositoryURL=( )
 Setting_BranchOrTag=( )
 Setting_BaseRelativePath=( )
+Setting_DeleteRelativePath=( )
 
 Main

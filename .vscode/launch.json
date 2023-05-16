@@ -1,0 +1,21 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Test",
+            "type": "bashdb",
+            "request": "launch",
+            "program": "${workspaceFolder}/test/test_codediff.sh",
+            "cwd": "${workspaceFolder}/test",
+            "args": ["-m"]
+        },
+        {
+            "name": "Main",
+            "type": "bashdb",
+            "request": "launch",
+            "program": "${workspaceFolder}/codediff",
+            "cwd": "${workspaceFolder}/test",
+            "args": []
+        }
+    ]
+}

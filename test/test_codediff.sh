@@ -17,6 +17,7 @@ function  Main() {
     TestLocal
     TestGitRepository
     TestGitRepositorySubFolder
+    TestOfDelete
     EndOfTest
 }
 
@@ -33,7 +34,7 @@ function  TestLocal() {
     ../codediff  ${TestOption}
     if [ "$( cat "${workingFolderPath}/.codediff.ini" )" != "$( cat "../codediff_template.ini" )" ]; then  TestError  "1"  ;fi
     AssertNotExist  "${workingFolderPath}/working"
-    Pause  "OK?"
+    Pause  "OK? Close Visual Studio Code"
 
     #// 2nd command
     CopyIniFileTemplate  "files/1_codediff.ini"  "${workingFolderPath}"
@@ -42,7 +43,7 @@ function  TestLocal() {
     ../codediff  ${TestOption}
     if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "a2" ]; then  TestError  "2"  ;fi
     AssertReadOnly  "${workingFolderPath}/working/a.txt"
-    Pause  "OK?"
+    Pause  "OK? Close Visual Studio Code"
     ChangeToOldCommit
     if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "a1" ]; then  TestError  "3"  ;fi
     rm -rf  "$HOME/_tmp/_diff"
@@ -62,7 +63,7 @@ function  TestGitRepository() {
     ../codediff  ${TestOption}
     if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "git a2" ]; then  TestError  "2"  ;fi
     AssertReadOnly  "${workingFolderPath}/working/a.txt"
-    Pause  "OK?"
+    Pause  "OK? Close Visual Studio Code"
     ChangeToOldCommit
     if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "git a1" ]; then  TestError  "3"  ;fi
     rm -rf  "$HOME/_tmp/_diff"
@@ -82,9 +83,31 @@ function  TestGitRepositorySubFolder() {
     ../codediff  ${TestOption}
     if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "git sub 2" ]; then  TestError  "2"  ;fi
     AssertReadOnly  "${workingFolderPath}/working/a.txt"
-    Pause  "OK?"
+    Pause  "OK? Close Visual Studio Code"
     ChangeToOldCommit
     if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "git sub 1" ]; then  TestError  "3"  ;fi
+    rm -rf  "$HOME/_tmp/_diff"
+    rm -f  "_codediff.log"
+}
+
+function  TestOfDelete() {
+    echo  ""
+    echo  "TestOfDelete =================================="
+    local  workingFolderPath="$HOME/_tmp/_diff/1"
+    rm -rf  "$HOME/_tmp/_diff"
+    rm -f  "_codediff.log"
+
+    CopyIniFileTemplate  "files/4_delete_codediff.ini"  "${workingFolderPath}"
+    Pause  "Next: Check opening the working folder."
+
+    ../codediff  ${TestOption}
+    if [ "$( cat "${workingFolderPath}/working/d.txt" )" != "d2" ]; then  TestError  "2"  ;fi
+    AssertNotExist  "${workingFolderPath}/working/dd.txt"
+    AssertNotExist  "${workingFolderPath}/working/sub_d"
+    Pause  "OK? Close Visual Studio Code"
+    ChangeToOldCommit
+    AssertNotExist  "${workingFolderPath}/working/sub1"
+    AssertNotExist  "${workingFolderPath}/working/d.txt"
     rm -rf  "$HOME/_tmp/_diff"
     rm -f  "_codediff.log"
 }
@@ -100,7 +123,7 @@ function  CopyIniFileTemplate() {
 function  ChangeToOldCommit() {
     pushd  "${workingFolderPath}/working"  > /dev/null
 
-    git reset  > /dev/null  2>&1
+    git reset --hard  > /dev/null  2>&1
     git checkout "."  > /dev/null  2>&1
     popd  > /dev/null
 }
