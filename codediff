@@ -150,6 +150,7 @@ function  OpenIDE() {
 function  ParseIniFile() {
     local  iniFilePath="$1"
     ResetSetting
+    StartTagParser  "${iniFilePath}"
     local  settingName=""
     local  localFullPath=""
     local  repositoryURL=""
@@ -166,6 +167,7 @@ function  ParseIniFile() {
     IFS="$oldIFS"
 
     for  line  in "${settingIniFileLines[@]}"; do
+        if ! ParsingIsActive "${line}"; then  continue  ;fi
         local  lineType="$( ParseIniFileLineType  "${line}" )"
 
         if [ "${lineType}" == "section" ]; then
@@ -246,6 +248,47 @@ function  AppendSetting() {
     Setting_RepositoryURL+=("${repositoryURL}")
     Setting_BranchOrTag+=("${branchOrTag}")
     Setting_BaseRelativePath+=("${baseRelativePath}")
+}
+
+function  StartTagParser() {
+    local  iniFilePath="$1"
+
+    if cat "${iniFilePath}"  |  grep "#codediff:" > /dev/null; then
+        TagParserIsActive="${True}"
+        ParsingState="NotStart"
+        SettingIndent=""
+    else
+        TagParserIsActive="${False}"
+    fi
+}
+TagParserIsActive="${False}"
+ParsingState="NotStart"
+SettingIndent=""
+
+function  ParsingIsActive() {
+    local  line="$1"
+    if [ "${TagParserIsActive}" == "${False}" ]; then
+        return  "${True}"
+    fi
+
+    if [ "${ParsingState}" == "NotStart" ]; then
+        if echo "${line}"  |  grep "#codediff:" > /dev/null; then
+            ParsingState="OnTag"
+        fi
+    elif [ "${ParsingState}" == "OnTag" ]; then
+        SettingIndent="$( echo "${line}"  |  grep "^ *" )"
+        ParsingState="Active"
+    elif [ "${ParsingState}" == "Active" ]; then
+        if echo "${line}"  |  ! grep "^${SettingIndent}" > /dev/null; then
+            ParsingState="Done"
+        fi
+    fi
+
+    if [ "${ParsingState}" == "Active" ]; then
+        return  "${True}"
+    else
+        return  "${False}"
+    fi
 }
 
 function  CopyFolder() {
