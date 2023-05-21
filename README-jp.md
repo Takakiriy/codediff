@@ -1,7 +1,10 @@
 # codediff
 
-フォルダーまたは Git リポジトリの差分を
-Git のコミットの差分として Visual Studio Code で表示します。
+codediff は2つのフォルダーの差分を分かりやすく
+Visual Studio Code に表示するCLIコマンドです。
+Git リポジトリのURLや、差分の設定ファイルを指定することもできます。
+
+無料の比較ソフトがない mac でも使えます。
 
 ![スクショ](./codediff.png)
 

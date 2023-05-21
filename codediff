@@ -393,7 +393,7 @@ function  CopyFolder() {
 }
 
 function  GetFullPath() {
-    local  relativePath="$1"
+    local  relativePath="$1"  #// or full path
     local  basePath="$2"
     local  option="$3"
     if [ "${option}" == "--touch" ]; then

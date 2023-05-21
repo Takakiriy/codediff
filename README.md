@@ -1,7 +1,11 @@
 # codediff
 
-Show difference between folders or Git repository
-as Git commit difference in Visual Studio Code.
+codediff is a CLI command that displays difference
+between two folders in Visual Studio Code
+in easy-to-understand manner.
+You can also specify Git repository URL or a diff configuration file.
+
+You can also be used on mac without free comparison software.
 
 ([Japanese](./README-jp.md))
 
