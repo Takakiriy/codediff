@@ -18,6 +18,7 @@ function  Main() {
     TestGitRepository
     TestGitRepositorySubFolder
     TestOfDelete
+    TestInText
     EndOfTest
 }
 
@@ -112,6 +113,25 @@ function  TestOfDelete() {
     rm -f  "_codediff.log"
 }
 
+function  TestInText() {
+    echo  ""
+    echo  "TestInText =================================="
+    local  workingFolderPath="$HOME/_tmp/_diff/1"
+    rm -rf  "$HOME/_tmp/_diff"
+    rm -f  "_codediff.log"
+    mkdir -p  "${workingFolderPath}"
+
+    echo  "old setting"  >  "${workingFolderPath}/.codediff.ini"
+
+    ../codediff  ${TestOption}  "files/5_codediff_in_text.yaml"
+    if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "a2" ]; then  TestError  "2"  ;fi
+    AssertReadOnly  "${workingFolderPath}/working/a.txt"
+    ChangeToOldCommit
+    if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "a1" ]; then  TestError  "3"  ;fi
+    rm -rf  "$HOME/_tmp/_diff"
+    rm -f  "_codediff.log"
+}
+
 function  CopyIniFileTemplate() {
     local  templatePath="$1"
     local  workingFolderPath="$2"
@@ -121,7 +141,7 @@ function  CopyIniFileTemplate() {
 }
 
 function  ChangeToOldCommit() {
-    pushd  "${workingFolderPath}/working"  > /dev/null
+    pushd  "${workingFolderPath}/working"  > /dev/null  ||  Error
 
     git reset --hard  > /dev/null  2>&1
     git checkout "."  > /dev/null  2>&1

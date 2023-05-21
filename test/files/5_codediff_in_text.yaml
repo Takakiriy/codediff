@@ -1,0 +1,15 @@
+not setting: |
+    [not setting]
+    RepositoryURL = https://github.com/Takakiriy/codediff
+    BranchOrTag = example_1
+
+settings: | #codediff:
+    [1]
+    LocalPath = repository_1
+
+    [2]
+    LocalPath = repository_2
+
+another text: |
+    [another text]
+    LocalPath = repository_d2

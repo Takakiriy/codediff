@@ -25,11 +25,17 @@ set -- "${PositionalArgs[@]}"  #// set $1, $2, ...
 unset PositionalArgs
 
 function  Main() {
+    local  iniFilePath="$1"
+    local  comparePathA="$1"  #// $1 is shared
+    local  comparePathB="$2"
     local  workingFolderPath="${WorkingFolderPathDefault}"
     if [ ! -e "${workingFolderPath}/.codediff.ini" ]; then
         MakeWorkingFolderIfNot  "${workingFolderPath}"
         OpenIDE  "${workingFolderPath}"  "${workingFolderPath}/.codediff.ini"
     else
+        if [ "${iniFilePath}" != ""  -a  "${comparePathB}" == ""  -a  -f "${iniFilePath}" ]; then
+            CopyIniFile  "${iniFilePath}"  "${workingFolderPath}"
+        fi
         ParseIniFile  "${workingFolderPath}/.codediff.ini"
         CreateWorkingFiles  0  "${workingFolderPath}/working_0"
         CreateWorkingFiles  1  "${workingFolderPath}/working_1"
@@ -48,6 +54,35 @@ function  MakeWorkingFolderIfNot() {
 
         cp  "${ThisScriptParentPath}/codediff_template.ini"  "${workingFolderPath}/.codediff.ini"
     fi
+}
+
+function  CopyIniFile() {
+    #// Replace "LocalPath" parameter to full path.
+    local  iniFilePath="$1"
+    local  workingFolderPath="$2"
+    local  basePath="${iniFilePath%/*}"
+    mkdir -p  "${workingFolderPath}"
+    local  line=""
+    local  settingIniFileLines=( )  &&  while IFS= read -r line ;do  settingIniFileLines+=("$line") ;done < "${iniFilePath}"
+
+    for  line  in "${settingIniFileLines[@]}"; do
+        local  lineType="$( ParseIniFileLineType  "${line}" )"
+        if [ "${lineType}" == "parameter" ]; then
+            local  name="$( ParseIniFileParameterName  "${line}" )"
+
+            if [ "${name}" == "LocalPath" ]; then
+                local  value="$( ParseIniFileParameterValue  "${line}" )"
+                localPath="$( Evaluate "${value}" )"
+
+                localPath="$(x="$( GetFullPath  "${localPath}"  "${basePath}" )" && echo "$x" || echo "(ERROR:$?)" )"
+                ExitIfMatched  "${localPath}"  '^\(ERROR:([0-9]*)\)$'
+                line="$( echo "${line}"  |  sed  "s|${value}|${localPath}|" )"
+            fi
+        fi
+        output+=("${line}")
+    done
+
+    printf '%s\n' "${output[@]}"  >  "${workingFolderPath}/.codediff.ini"
 }
 
 function  CreateWorkingFiles() {
@@ -105,26 +140,26 @@ function  CreateNewGitWorking() {
 
     rm -rf "${workingFolderPath}/working"
     mkdir  "${workingFolderPath}/working"
-    pushd  "${workingFolderPath}/working"  > /dev/null
+    pushd  "${workingFolderPath}/working"  > /dev/null  ||  Error
 
     git init ${GitInitOption}  > /dev/null  2>&1
     git config --local user.email "you@example.com"
     git config --local user.name "Your Name"
     popd  > /dev/null
     mv  "${workingFolderPath}/working/.git"  "${oldContentsPath}"
-    pushd  "${oldContentsPath}"  > /dev/null
+    pushd  "${oldContentsPath}"  > /dev/null  ||  Error
 
     git add "."
     git commit -m "${Setting_Name[0]}"  > /dev/null  2>&1
     popd  > /dev/null
     mv  "${oldContentsPath}/.git"  "${newContentsPath}"
-    pushd  "${newContentsPath}"  > /dev/null
+    pushd  "${newContentsPath}"  > /dev/null  ||  Error
 
     git add "."
     git commit -m "${Setting_Name[1]}"  > /dev/null  2>&1
     popd  > /dev/null
     mv  "${newContentsPath}/.git"  "${workingFolderPath}/working"
-    pushd  "${workingFolderPath}/working"  > /dev/null
+    pushd  "${workingFolderPath}/working"  > /dev/null  ||  Error
 
     git checkout "."  > /dev/null  2>&1
     git reset --soft HEAD^
@@ -151,20 +186,15 @@ function  ParseIniFile() {
     local  iniFilePath="$1"
     ResetSetting
     StartTagParser  "${iniFilePath}"
+    local  basePath="${iniFilePath%/*}"
     local  settingName=""
     local  localFullPath=""
     local  repositoryURL=""
     local  branchOrTag=""
     local  baseRelativePath=""
     AssertExist  "${iniFilePath}"
-
-    local  settingIniFile="$( cat "${iniFilePath}" )"
-
-    #// Read a setting .ini file
-    local  oldIFS="$IFS"
-    IFS=$'\n'
-    local  settingIniFileLines=( ${settingIniFile} )
-    IFS="$oldIFS"
+    local  line=""
+    local  settingIniFileLines=( )  &&  while IFS= read -r line ;do  settingIniFileLines+=("$line") ;done < "${iniFilePath}"
 
     for  line  in "${settingIniFileLines[@]}"; do
         if ! ParsingIsActive "${line}"; then  continue  ;fi
@@ -184,8 +214,8 @@ function  ParseIniFile() {
             local  name="$( ParseIniFileParameterName  "${line}" )"
             local  value="$( ParseIniFileParameterValue  "${line}" )"
             value="$( Evaluate "${value}" )"
-            if [ "${name}" == "LocalFullPath" ]; then
-                localFullPath="${value}"
+            if [ "${name}" == "LocalPath" ]; then
+                localFullPath="$( GetFullPath  "${value}"  "${basePath}" )"
             elif [ "${name}" == "RepositoryURL" ]; then
                 repositoryURL="${value}"
             elif [ "${name}" == "BranchOrTag" ]; then
@@ -271,16 +301,18 @@ function  ParsingIsActive() {
         return  "${True}"
     fi
 
-    if [ "${ParsingState}" == "NotStart" ]; then
-        if echo "${line}"  |  grep "#codediff:" > /dev/null; then
-            ParsingState="OnTag"
-        fi
-    elif [ "${ParsingState}" == "OnTag" ]; then
-        SettingIndent="$( echo "${line}"  |  grep "^ *" )"
-        ParsingState="Active"
-    elif [ "${ParsingState}" == "Active" ]; then
-        if echo "${line}"  |  ! grep "^${SettingIndent}" > /dev/null; then
-            ParsingState="Done"
+    if [ "${line/[[:space:]]/}" != "" ]; then
+        if [ "${ParsingState}" == "NotStart" ]; then
+            if echo "${line}"  |  grep "#codediff:" > /dev/null; then
+                ParsingState="OnTag"
+            fi
+        elif [ "${ParsingState}" == "OnTag" ]; then
+            SettingIndent="$( echo "${line}"  |  grep -o "^ *" )"
+            ParsingState="Active"
+        elif [ "${ParsingState}" == "Active" ]; then
+            if !( echo "${line}"  |  grep "^${SettingIndent}" ) > /dev/null; then
+                ParsingState="Done"
+            fi
         fi
     fi
 
@@ -313,6 +345,53 @@ function  CopyFolder() {
     fi
 }
 
+function  GetFullPath() {
+    local  relativePath="$1"
+    local  basePath="$2"
+    local  option="$3"
+    if [ "${option}" == "--touch" ]; then
+        if [ "${basePath}" == "" ]; then
+            mkdir -p  "${relativePath%/*}"
+            touch  "${relativePath}"  #// for next readlink
+        else
+            local  touchPath="${basePath}/${relativePath}"
+            mkdir -p  "${touchPath%/*}"
+            touch  "${basePath}/${relativePath}"  #// for next readlink
+        fi
+    fi
+
+    if [ "${basePath}" == "" ]; then
+        local  fullPath="$( readlink -f  "${relativePath}" )"
+        if [ "${fullPath}" != "" ]; then
+            echo  "${fullPath}"
+            return
+        fi
+        basePath="${PWD}"
+    fi
+    local  baseTail="${basePath: $((${#basePath}-3))}"
+    if [ "${baseTail}" == "/.." ]; then
+        basePath=${basePath%/*}
+        basePath=${basePath%/*}
+    fi
+
+    if [ "${relativePath:0:1}" != "/"  -a  "${relativePath:0:1}" != '$' ]; then
+        local  fullPath="$( readlink -f  "${basePath}/${relativePath}" )"
+    else
+        local  fullPath="${relativePath}"
+    fi
+    fullPath="$( eval echo "${fullPath}" )"  #// Evaluate variables
+    if [ "${fullPath}" == "" ]; then
+        if [ "${option}" == "--mkdir" ]; then
+            pushd  "${basePath}"  > /dev/null
+            mkdir -p  "${relativePath}"
+            popd  > /dev/null
+        elif [ "${option}" != "--empty-if-not-exist" ]; then
+            Error  "ERROR: Cannot get full path from \"${relativePath}\" in \"${basePath}\"."
+        fi
+    fi
+    echo  "${fullPath}"
+}
+
 function  CutLastOf() {
     local  wholeString="$1"
     local  lastExpected="$2"
@@ -340,7 +419,7 @@ function  ParseIniFileLineType() {
 
 function  ParseIniFileSectionName() {
     local  line="$1"
-    echo  "${line}"  |  sed -E 's/^\[|\] *$//g'
+    echo  "${line}"  |  sed -E 's/^[ \t]*\[|\] *$//g'
 }
 
 function  ParseIniFileParameterName() {
@@ -432,6 +511,21 @@ function  AssertNotExist() {
     fi
 }
 
+# ExitIfMatched
+#     Check exit code and return code in $( )
+# Example:
+#     local  out="$(x="$( command )" && echo "$x" || echo "(ERROR:$?)" )"
+#     ExitIfMatched  "${out}"  '^\(ERROR:([0-9]*)\)$'
+function  ExitIfMatched() {
+    local  output="$1"
+    local  regularExpression="$2"
+
+    if [[ "${output}" =~ ${regularExpression} ]]; then
+        local  exitCode="$( echo "${output}"  |  sed -E  's/'"${regularExpression}"'/\1/')"
+        exit  "${exitCode}"
+    fi
+}
+
 function  Error() {
     local  errorMessage="$1"
     local  exitCode="$2"
@@ -454,4 +548,4 @@ Setting_BranchOrTag=( )
 Setting_BaseRelativePath=( )
 Setting_DeleteRelativePath=( )
 
-Main
+Main "$@"
