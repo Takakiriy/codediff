@@ -14,12 +14,41 @@ set -- "${PositionalArgs[@]}"  #// set $1, $2, ...
 unset PositionalArgs
 
 function  Main() {
+    TestParameters
     TestLocal
     TestGitRepository
     TestGitRepositorySubFolder
     TestOfDelete
     TestInText
     EndOfTest
+}
+
+function  TestParameters() {
+    echo  ""
+    echo  "TestParameters =================================="
+    local  workingFolderPath="$HOME/_tmp/_diff/1"
+
+    rm -rf  "$HOME/_tmp/_diff"
+    rm -f  "_codediff.log"
+    Pause  "Next: Check opening a Visual Studio Code and select Source Control view (git)."
+
+    ../codediff  ${TestOption}  "files/repository_1"  "files/repository_2"
+    if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "a2" ]; then  TestError  "2"  ;fi
+    AssertReadOnly  "${workingFolderPath}/working/a.txt"
+    Pause  "OK? Close Visual Studio Code"
+    ChangeToOldCommit
+    if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "a1" ]; then  TestError  "3"  ;fi
+
+    ../codediff  ${TestOption}  \
+        "https://github.com/Takakiriy/codediff#example_1"  \
+        "https://github.com/Takakiriy/codediff#example_2"
+    if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "git a2" ]; then  TestError  "2"  ;fi
+    AssertReadOnly  "${workingFolderPath}/working/a.txt"
+    Pause  "OK? Close Visual Studio Code"
+    ChangeToOldCommit
+    if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "git a1" ]; then  TestError  "3"  ;fi
+    rm -rf  "$HOME/_tmp/_diff"
+    rm -f  "_codediff.log"
 }
 
 function  TestLocal() {

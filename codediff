@@ -29,13 +29,17 @@ function  Main() {
     local  comparePathA="$1"  #// $1 is shared
     local  comparePathB="$2"
     local  workingFolderPath="${WorkingFolderPathDefault}"
+
+    if [ "${comparePathA}" != ""  -a  "${comparePathB}" != "" ]; then
+        MakeIniFileFromParameters  "${comparePathA}"  "${comparePathB}" 
+    elif [ "${iniFilePath}" != ""  -a  "${comparePathB}" == ""  -a  -f "${iniFilePath}" ]; then
+        CopyIniFile  "${iniFilePath}"  "${workingFolderPath}"
+    fi
+
     if [ ! -e "${workingFolderPath}/.codediff.ini" ]; then
         MakeWorkingFolderIfNot  "${workingFolderPath}"
         OpenIDE  "${workingFolderPath}"  "${workingFolderPath}/.codediff.ini"
     else
-        if [ "${iniFilePath}" != ""  -a  "${comparePathB}" == ""  -a  -f "${iniFilePath}" ]; then
-            CopyIniFile  "${iniFilePath}"  "${workingFolderPath}"
-        fi
         ParseIniFile  "${workingFolderPath}/.codediff.ini"
         CreateWorkingFiles  0  "${workingFolderPath}/working_0"
         CreateWorkingFiles  1  "${workingFolderPath}/working_1"
@@ -56,6 +60,48 @@ function  MakeWorkingFolderIfNot() {
     fi
 }
 
+function  MakeIniFileFromParameters() {
+    local  parameters=( "$1" "$2" )
+    local  output="${workingFolderPath}/.codediff.ini"
+    local  fileOrFolder=1
+    local  repository=2
+    rm -rf    "${workingFolderPath}"
+    mkdir -p  "${workingFolderPath}"
+
+    echo  "# codediff command setting file"  >  "${output}"
+    for i in {0..1}; do
+        local  parameter="${parameters[${i}]}"
+        local  kind=""
+        echo  ""  >>  "${output}"
+        echo  "[Compare-${i}]"  >>  "${output}"
+
+        if [ "${parameter:0:4}" == "http" ]; then
+            kind="${repository}"
+            #// http(s)://_____
+            #// http(s)://_____#__Branch__
+            local  repositoryURL="${parameter%%#*}"  #// left of #
+            if [ "${repositoryURL}" != "${parameter}" ]; then
+                local  branchOrTag="${parameter#*#*}"  #// right of #
+            else
+                local  branchOrTag=""
+            fi
+        else
+            kind="${fileOrFolder}"
+            local  fullPath="$(x="$( GetFullPath "${parameter}" )" && echo "$x" || echo "(ERROR:$?)" )"
+            ExitIfMatched  "${fullPath}"  '^\(ERROR:([0-9]*)\)$'
+        fi
+
+        if [ "${kind}" == "${fileOrFolder}" ]; then
+            echo  "LocalPath = ${fullPath}"  >>  "${output}"
+        elif [ "${kind}" == "${repository}" ]; then
+            echo  "RepositoryURL = ${repositoryURL}"  >>  "${output}"
+            if [ "${branchOrTag}" != "" ]; then
+                echo  "BranchOrTag = ${branchOrTag}"  >>  "${output}"
+            fi
+        fi
+    done
+}
+
 function  CopyIniFile() {
     #// Replace "LocalPath" parameter to full path.
     local  iniFilePath="$1"
@@ -73,6 +119,7 @@ function  CopyIniFile() {
             if [ "${name}" == "LocalPath" ]; then
                 local  value="$( ParseIniFileParameterValue  "${line}" )"
                 localPath="$( Evaluate "${value}" )"
+                value="$( echo "${value}" | sed -E 's/([$^.*+?\(\){}\|[])/\\\1/g' | sed -E 's/]/\\]/g' )"  #// Escape
 
                 localPath="$(x="$( GetFullPath  "${localPath}"  "${basePath}" )" && echo "$x" || echo "(ERROR:$?)" )"
                 ExitIfMatched  "${localPath}"  '^\(ERROR:([0-9]*)\)$'
@@ -257,20 +304,20 @@ function  AppendSetting() {
         Error  "ERROR: Not specified section name ${lastOfErrorMessage}"
     elif [ "${localFullPath}" != "" ]; then
         if [ "${localFullPath:0:1}" != "/" ]; then
-            Error  "ERROR: LocalFullPath must be full path ${lastOfErrorMessage}"
+            Error  "ERROR: LocalPath must be full path ${lastOfErrorMessage}"
         elif [ "${repositoryURL}" != "" ]; then
-            Error  "ERROR: Cannot both setting LocalFullPath and RepositoryURL ${lastOfErrorMessage}"
+            Error  "ERROR: Cannot both setting LocalPath and RepositoryURL ${lastOfErrorMessage}"
         elif [ "${branchOrTag}" != "" ]; then
-            Error  "ERROR: Cannot both setting LocalFullPath and BranchOrTag ${lastOfErrorMessage}"
+            Error  "ERROR: Cannot both setting LocalPath and BranchOrTag ${lastOfErrorMessage}"
         elif [ "${baseRelativePath}" != "" ]; then
-            Error  "ERROR: Cannot both setting LocalFullPath and BaseRelativePath ${lastOfErrorMessage}"
+            Error  "ERROR: Cannot both setting LocalPath and BaseRelativePath ${lastOfErrorMessage}"
         fi
     elif [ "${repositoryURL}" != "" ]; then
         if [ "${baseRelativePath}" == "" ]; then
             baseRelativePath="."
         fi
     else
-        Error  "ERROR: LocalFullPath or RepositoryURL must be set ${lastOfErrorMessage}"
+        Error  "ERROR: LocalPath or RepositoryURL must be set ${lastOfErrorMessage}"
     fi
 
     Setting_Name+=("${settingName}")

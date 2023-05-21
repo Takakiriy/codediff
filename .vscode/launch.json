@@ -7,7 +7,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/test/test_codediff.sh",
             "cwd": "${workspaceFolder}/test",
-            "args": ["-m"]
+            "args": []
         },
         {
             "name": "Main",

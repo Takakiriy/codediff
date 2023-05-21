@@ -7,23 +7,41 @@ as Git commit difference in Visual Studio Code.
 
 ![screen shot](./codediff.png)
 
+
 ## Command Example
 
-### If there is not `~/_tmp/_diff/1` folder
+### If specifying a comparison target for the codediff command
+
+    codediff  path/to/folder1  path/to/folder2
+
+or
+
+    codediff  https://URL1#branch1  https://URL2#branch2
+
+You can also specify paths and URL to compare.
+
+- Create a setting file at `~/_tmp/_diff/1/.codediff.ini`
+- `.git` folder is created in `~/_tmp/_diff/1/working` and Git commit difference is created
+- Visual Studio Code is opened
+- Please change to Source Control view and show difference
+
+### If there is not command parameterｓ and there is not `~/_tmp/_diff/1/.codediff.ini` file
 
     codediff
 
-- Create a Git working folder at `~/_tmp/_diff/1`
-- Setting file `.codediff.ini` is made
+- Create a setting file at `~/_tmp/_diff/1/.codediff.ini`.
+    Created file is a copy of `codediff_template.ini` file
+    that there is in `codediff` command folder
 - Visual Studio Code is opened
-- Edit the setting file `.codediff.ini`
+- To compare is not done, yet
+- Please, edit the setting file `.codediff.ini` and run `codediff` again (below described)
 
-### If there is `~/_tmp/_diff/1` folder
+### If there is not command parameterｓ and there not `~/_tmp/_diff/1/.codediff.ini` file
 
     codediff
 
 - Read `~/_tmp/_diff/1/.codediff.ini` file
-- `.git` folder is created in local and Git commit difference is created
+- `.git` folder is created in `~/_tmp/_diff/1/working` and Git commit difference is created
 - Visual Studio Code is opened
 - Please change to Source Control view and show difference
 
@@ -31,9 +49,9 @@ as Git commit difference in Visual Studio Code.
 
     codediff  codediff.ini
 
-- Copy the specified setting file to `~/_tmp/_diff/1` and read it.
+- Copy the specified setting file to `~/_tmp/_diff/1/.codediff.ini` and read it.
     At this time, LocalPath parameter is replaced to full path
-- `.git` folder is created in local and Git commit difference is created
+- `.git` folder is created in `~/_tmp/_diff/1/working` and Git commit difference is created
 - Visual Studio Code is opened
 - Please change to Source Control view and show difference
 
