@@ -10,7 +10,7 @@ if [ -e "/Applications/Visual Studio Code.app" ]; then
 elif [ -e "${HOME}/AppData/Local/Programs/Microsoft VS Code" ]; then
     VisualStudioCodePath="${HOME}/AppData/Local/Programs/Microsoft VS Code/bin/code"
 else
-    VisualStudioCodePath="__NotFoundVisualStudioCode"
+    VisualStudioCodePath="code"
 fi
 
 PositionalArgs=()
@@ -145,6 +145,7 @@ function  CreateWorkingFiles() {
     if [ "${localFullPath}" != "" ]; then
 
         CopyFolder  "${localFullPath}"  "${outputFolderPath}"
+        rm -rf  "${outputFolderPath}/.git"
     else
         local  options=""
         if [ "${branchOrTag}" != "" ]; then
@@ -195,12 +196,16 @@ function  CreateNewGitWorking() {
     popd  > /dev/null
     mv  "${workingFolderPath}/working/.git"  "${oldContentsPath}"
     pushd  "${oldContentsPath}"  > /dev/null  ||  Error
+    find "." -type f  |  xargs  -I {} \
+        chmod 444 "{}"
 
     git add "."
     git commit -m "${Setting_Name[0]}"  > /dev/null  2>&1
     popd  > /dev/null
     mv  "${oldContentsPath}/.git"  "${newContentsPath}"
     pushd  "${newContentsPath}"  > /dev/null  ||  Error
+    find "." -type f  |  xargs  -I {} \
+        chmod 444 "{}"
 
     git add "."
     git commit -m "${Setting_Name[1]}"  > /dev/null  2>&1
