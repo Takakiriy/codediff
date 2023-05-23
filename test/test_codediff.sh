@@ -20,6 +20,7 @@ function  Main() {
     TestGitRepositorySubFolder
     TestOfDelete
     TestInText
+    TestCopyFolder
     EndOfTest
 }
 
@@ -161,6 +162,60 @@ function  TestInText() {
     rm -f  "_codediff.log"
 }
 
+function  TestCopyFolder() {
+    MakeCopySource  "_work/source"
+
+    CopyFolder  "_work/source"  "_work/destination"
+    pushd  "_work/destination"  >  /dev/null
+    local  result="$( find . )"
+    popd  >  /dev/null
+local  answer=".
+./empty
+./empty/s
+./sub1
+./sub1/s
+./sub1/s/a.txt
+./a.txt
+./sub2
+./sub2/s
+./sub2/s/a.txt
+./sub2/s/build
+./sub2/s/build/_do_not_copy
+./build
+./build/_do_not_copy"
+    test  "${result}" == "${answer}"  ||  Error
+    rm -rf  "_work/destination"
+
+    CopyFolder  "_work/source"  "_work/destination"  --exclude build  --exclude sub2/s/build  --exclude empty/s
+    pushd  "_work/destination"  >  /dev/null
+    local  result="$( find . )"
+    popd  >  /dev/null
+local  answer=".
+./empty
+./sub1
+./sub1/s
+./sub1/s/a.txt
+./a.txt
+./sub2
+./sub2/s
+./sub2/s/a.txt"
+    test  "${result}" == "${answer}"  ||  Error
+    rm -rf  "_work/destination"
+
+    CopyFolder  "_work/source"  "_work/destination"  --exclude ./sub2  --exclude ./sub2/s/build  --exclude ./empty/s
+    test  "${result}" == "${answer}"  ||  Error
+    rm -rf  "_work"
+}
+
+function  MakeCopySource() {
+    local  source="$1"
+    test  "${source}" == "_work/source"  ||  Error
+    rm -rf  "_work"
+    mkdir   "_work"
+    cp -Rap  "files/copy_test"  "_work/source"
+    rm  "_work/source/empty/s/_delete_me"
+}
+
 function  CopyIniFileTemplate() {
     local  templatePath="$1"
     local  workingFolderPath="$2"
@@ -186,6 +241,86 @@ function  Pause() {
     echo  ""
     echo  "${message}"
     read  -p "To continue, press Enter key."  dummyVariable 
+}
+
+#// CopyFolder
+#//     Copy of this function in codediff
+function  CopyFolder() {
+    local  source="$1"
+    local  destination="$2"
+
+    local  excludePaths=( )
+    while true; do
+        local  option="$3"
+        if [ "${option}" == "" ]; then
+            break
+        fi
+        if [ "${option}" == "--exclude" ]; then
+            excludePaths+=("$4")
+            shift  2
+        elif [ "${option:0:10}" == "--exclude=" ]; then
+            excludePaths+=("${option:10}")
+            shift
+        else
+            Error  "Not supported option: ${ignoreDotGit}"
+        fi
+    done
+
+    source="$( CutLastOf  "${source}"  "/" )"
+    destination="$( CutLastOf  "${destination}"  "/" )"
+
+    mkdir -p  "${destination}/"
+    if [ "${#excludePaths[@]}" == 0 ]; then
+        ls -a "${source}" | grep -v  -e "^\.$"  -e "^\.\.$" | xargs  -I {} \
+            cp -Rap  "${source}/{}"  "${destination}/"
+    else
+        local  sourceEscaped="$( echo "${source}" | sed -E 's/([$^.*+?\(\){}\|[])/\\\1/g' | sed -E 's/]/\\]/g' )"
+        local  sourceFilePathText="$( find "${source}" -type f  |  sort )"
+        local  sourceEmptyFolderPathText="$( ScanEmptyFolderPaths  "${source}"  "${sourceFilePathText}" )"
+        local  filePathText="$( echo "${sourceFilePathText}"  |  sed -E "s|^${sourceEscaped}|.|" )"
+        local  emptyFolderPathText="$( echo "${sourceEmptyFolderPathText}"  |  sed -E "s|^${sourceEscaped}|.|" )"
+        local  excludePath=""
+        for excludePath in "${excludePaths[@]}"; do
+            if [ "${excludePath:0:2}" != "./" ]; then
+                excludePath="./${excludePath}"
+            fi
+            local  excludePathEscaped="$( echo "${excludePath}" | sed -E 's/([$^.*+?\(\){}\|[])/\\\1/g' | sed -E 's/]/\\]/g' )"
+
+            filePathText="$( echo "${filePathText}"  |  grep -vE "^${excludePathEscaped}" )"
+            emptyFolderPathText="$( echo "${emptyFolderPathText}"  |  grep -vE "^${excludePathEscaped}" )"
+        done
+        local  fileFolderPathText="$( echo "${filePathText}"  |  sed -E 's|/[^/]*$||'  |  uniq )"
+
+        echo  "${emptyFolderPathText}"  |  xargs  -I {} \
+            mkdir -p  "${destination}/{}"
+        echo  "${fileFolderPathText}"  |  xargs  -I {} \
+            mkdir -p  "${destination}/{}"
+        echo  "${filePathText}"  |  xargs  -I {} \
+            cp -Rap  "${source}/{}"  "${destination}/{}"
+    fi
+}
+
+function  ScanEmptyFolderPaths() {
+    local  basePath="$1"
+    local  scanedFilePaths="$2"
+
+    local  folderPaths="$( find "${basePath}" -type d  |  sort  |  sed -E "s|$|:|"  |  sed -E "s|^|:|" )"
+    local  fileFolderPaths="$( echo "${scanedFilePaths}"  |  sed -E 's|/[^/]*$|:|'  |  sed -E "s|^|:|"  |  uniq )"
+    local  emptyFolderPaths="$( grep -vFf <(echo "${fileFolderPaths}")  <(echo "${folderPaths}")  | \
+        sed -E 's/:$//'  |  sed -E 's/^://' )"
+
+    echo  "${emptyFolderPaths}"
+}
+
+function  CutLastOf() {
+    local  wholeString="$1"
+    local  lastExpected="$2"
+
+    if [ "${wholeString:${#wholeString}-${#lastExpected}:${#lastExpected}}" == "${lastExpected}" ]; then
+        echo  "${wholeString:0:${#wholeString}-${#lastExpected}}"
+    else
+        echo  "${wholeString}"
+    fi
 }
 
 function  AssertNotExist() {

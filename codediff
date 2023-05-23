@@ -378,23 +378,68 @@ function  ParsingIsActive() {
 function  CopyFolder() {
     local  source="$1"
     local  destination="$2"
-    local  ignoreDotGit="$3"  #// ${True}, ${False}(default)
-    local  excludeOption="--exclude=./.git"
+
+    local  excludePaths=( )
+    while true; do
+        local  option="$3"
+        if [ "${option}" == "" ]; then
+            break
+        fi
+        if [ "${option}" == "--exclude" ]; then
+            excludePaths+=("$4")
+            shift  2
+        elif [ "${option:0:10}" == "--exclude=" ]; then
+            excludePaths+=("${option:10}")
+            shift
+        else
+            Error  "Not supported option: ${ignoreDotGit}"
+        fi
+    done
+
     source="$( CutLastOf  "${source}"  "/" )"
     destination="$( CutLastOf  "${destination}"  "/" )"
-    if [ "${ignoreDotGit}" != ""  -a  "${ignoreDotGit}" != "${excludeOption}" ]; then
-        TestError  "Bad option: ${ignoreDotGit}"
-        return  "${False}"
-    fi
 
     mkdir -p  "${destination}/"
-    if [ "${ignoreDotGit}" == "${excludeOption}" ]; then
-        ls -a "${source}" | grep -v  -e "^\.git$"  -e "^\.$"  -e "^\.\.$" | xargs  -I {} \
-            cp -Rap  "${source}/{}"  "${destination}/"
-    else
+    if [ "${#excludePaths[@]}" == 0 ]; then
         ls -a "${source}" | grep -v  -e "^\.$"  -e "^\.\.$" | xargs  -I {} \
             cp -Rap  "${source}/{}"  "${destination}/"
+    else
+        local  sourceEscaped="$( echo "${source}" | sed -E 's/([$^.*+?\(\){}\|[])/\\\1/g' | sed -E 's/]/\\]/g' )"
+        local  sourceFilePathText="$( find "${source}" -type f  |  sort )"
+        local  sourceEmptyFolderPathText="$( ScanEmptyFolderPaths  "${source}"  "${sourceFilePathText}" )"
+        local  filePathText="$( echo "${sourceFilePathText}"  |  sed -E "s|^${sourceEscaped}|.|" )"
+        local  emptyFolderPathText="$( echo "${sourceEmptyFolderPathText}"  |  sed -E "s|^${sourceEscaped}|.|" )"
+        local  excludePath=""
+        for excludePath in "${excludePaths[@]}"; do
+            if [ "${excludePath:0:2}" != "./" ]; then
+                excludePath="./${excludePath}"
+            fi
+            local  excludePathEscaped="$( echo "${excludePath}" | sed -E 's/([$^.*+?\(\){}\|[])/\\\1/g' | sed -E 's/]/\\]/g' )"
+
+            filePathText="$( echo "${filePathText}"  |  grep -vE "^${excludePathEscaped}" )"
+            emptyFolderPathText="$( echo "${emptyFolderPathText}"  |  grep -vE "^${excludePathEscaped}" )"
+        done
+        local  fileFolderPathText="$( echo "${filePathText}"  |  sed -E 's|/[^/]*$||'  |  uniq )"
+
+        echo  "${emptyFolderPathText}"  |  xargs  -I {} \
+            mkdir -p  "${destination}/{}"
+        echo  "${fileFolderPathText}"  |  xargs  -I {} \
+            mkdir -p  "${destination}/{}"
+        echo  "${filePathText}"  |  xargs  -I {} \
+            cp -Rap  "${source}/{}"  "${destination}/{}"
     fi
+}
+
+function  ScanEmptyFolderPaths() {
+    local  basePath="$1"
+    local  scanedFilePaths="$2"
+
+    local  folderPaths="$( find "${basePath}" -type d  |  sort  |  sed -E "s|$|:|"  |  sed -E "s|^|:|" )"
+    local  fileFolderPaths="$( echo "${scanedFilePaths}"  |  sed -E 's|/[^/]*$|:|'  |  sed -E "s|^|:|"  |  uniq )"
+    local  emptyFolderPaths="$( grep -vFf <(echo "${fileFolderPaths}")  <(echo "${folderPaths}")  | \
+        sed -E 's/:$//'  |  sed -E 's/^://' )"
+
+    echo  "${emptyFolderPaths}"
 }
 
 function  GetFullPath() {

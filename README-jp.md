@@ -1,4 +1,4 @@
-# codediff
+# codediff for Visual Studio Code
 
 codediff は2つのフォルダーの差分を分かりやすく
 Visual Studio Code に表示するCLIコマンドです。
