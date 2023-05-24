@@ -190,35 +190,33 @@ function  CreateNewGitWorking() {
     mkdir  "${workingFolderPath}/working"
     pushd  "${workingFolderPath}/working"  > /dev/null  ||  Error
 
-    git init ${GitInitOption}  > /dev/null  2>&1
+    git init ${GitInitOption}  > /dev/null  2>&1  ||  Error
     git config --local user.email "you@example.com"
     git config --local user.name "Your Name"
     popd  > /dev/null
-    mv  "${workingFolderPath}/working/.git"  "${oldContentsPath}"
+    mv  "${workingFolderPath}/working/.git"  "${oldContentsPath}"  ||  Error
     pushd  "${oldContentsPath}"  > /dev/null  ||  Error
     find "." -type f  |  xargs  -I {} \
         chmod 444 "{}"
 
     git add "."
-    git commit -m "${Setting_Name[0]}"  > /dev/null  2>&1
+    git commit -m "${Setting_Name[0]}"  > /dev/null  2>&1  ||  Error
     popd  > /dev/null
-    mv  "${oldContentsPath}/.git"  "${newContentsPath}"
+    mv  "${oldContentsPath}/.git"  "${newContentsPath}"  ||  Error
     pushd  "${newContentsPath}"  > /dev/null  ||  Error
-    find "." -type f  |  xargs  -I {} \
+    find "." -type f  |  grep -vE "^./.git/"  |  xargs  -I {} \
         chmod 444 "{}"
 
     git add "."
-    git commit -m "${Setting_Name[1]}"  > /dev/null  2>&1
+    git commit -m "${Setting_Name[1]}"  > /dev/null  2>&1  || Error
     popd  > /dev/null
-    mv  "${newContentsPath}/.git"  "${workingFolderPath}/working"
+    mv  "${newContentsPath}/.git"  "${workingFolderPath}/working"  ||  Error
     pushd  "${workingFolderPath}/working"  > /dev/null  ||  Error
 
-    git checkout "."  > /dev/null  2>&1
-    git reset --soft HEAD^
-    mv  ".git"  ".."
-    find "." -type f  |  xargs  -I {} \
+    git checkout "."  > /dev/null  2>&1  ||  Error
+    git reset --soft HEAD^  ||  Error
+    find "." -type f  |  grep -vE "^./.git/"  |  xargs  -I {} \
         chmod 444 "{}"
-    mv  "../.git"  "."
     popd  > /dev/null
 }
 
