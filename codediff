@@ -144,8 +144,12 @@ function  CreateWorkingFiles() {
     rm -rf  "${outputFolderPath}"
     if [ "${localFullPath}" != "" ]; then
 
-        CopyFolder  "${localFullPath}"  "${outputFolderPath}"
-        rm -rf  "${outputFolderPath}/.git"
+        local  excludeOptions="--exclude .git"
+        for  dexcludePath  in "${Setting_DeleteRelativePath[@]}"; do
+            excludeOptions="${excludeOptions}  --exclude \"${dexcludePath}\""
+        done
+
+        CopyFolder  "${localFullPath}"  "${outputFolderPath}"  ${excludeOptions}
     else
         local  options=""
         if [ "${branchOrTag}" != "" ]; then
@@ -169,15 +173,15 @@ function  CreateWorkingFiles() {
             mv  "${WorkingFolderPathDefault}/workingOfWorking/${baseRelativePath}"  "${outputFolderPath}"
             rm -rf  "${WorkingFolderPathDefault}/workingOfWorking"
         fi
+
+        local  deletingPath=""
+        for  deletingPath  in "${Setting_DeleteRelativePath[@]}"; do
+            pushd  "${outputFolderPath}"  > /dev/null  ||  Error
+
+            rm -rf  "${deletingPath}"
+            popd  > /dev/null
+        done
     fi
-
-    local  deletingPath=""
-    for  deletingPath  in "${Setting_DeleteRelativePath[@]}"; do
-        pushd  "${outputFolderPath}"  > /dev/null  ||  Error
-
-        rm -rf  "${deletingPath}"
-        popd  > /dev/null
-    done
 }
 
 function  CreateNewGitWorking() {
@@ -384,7 +388,7 @@ function  CopyFolder() {
             break
         fi
         if [ "${option}" == "--exclude" ]; then
-            excludePaths+=("$4")
+            excludePaths+=( "$( CutDoubleQuotation "$4" )" )
             shift  2
         elif [ "${option:0:10}" == "--exclude=" ]; then
             excludePaths+=("${option:10}")
@@ -496,6 +500,10 @@ function  CutLastOf() {
     else
         echo  "${wholeString}"
     fi
+}
+
+function  CutDoubleQuotation() {
+    echo  "$1"  |  sed -E 's/^"|"$//g'
 }
 
 function  ParseIniFileLineType() {
