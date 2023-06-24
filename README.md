@@ -16,7 +16,7 @@ You can also be used on mac without free comparison software.
 
 ### If specifying a comparison target for the codediff command
 
-    codediff  path/to/folder1  path/to/folder2
+    codediff  path/to/old/folder  path/to/new/folder
 
 or
 
@@ -54,7 +54,8 @@ You can also specify paths and URL to compare.
     codediff  codediff.ini
 
 - Copy the specified setting file to `~/_tmp/_diff/1/.codediff.ini` and read it.
-    At this time, LocalPath parameter is replaced to full path
+    `LocalPath` parameter in the destination file will be replaced to
+    the full path.
 - `.git` folder is created in `~/_tmp/_diff/1/working` and Git commit difference is created
 - Visual Studio Code is opened
 - Please change to Source Control view and show difference
@@ -66,22 +67,24 @@ Example:
 
     # codediff command setting file
 
-    [New]
-    LocalPath = /home/user1/project1
-    DeleteRelativePath = _base
-
     [Old]
     RepositoryURL = https://github.com/Takakiriy/example1
     BranchOrTag = develop
 
+    [New]
+    LocalPath = /home/user1/project1
+    ExcludeRelativePath = _base
+
 Write 2 sections as the following format setting.
+When comparing old and new folders or files,
+specify the old one as the first and the new one as the second.
 
 Case of copy from local other folder:
 
     [__CommitMessage__]
     LocalPath = ____
-    DeleteRelativePath = ____
-    DeleteRelativePath = ____
+    ExcludeRelativePath = ____
+    ExcludeRelativePath = ____
         ...
 
 Case of downloading from Git repository:
@@ -90,11 +93,13 @@ Case of downloading from Git repository:
     RepositoryURL = ____
     BranchOrTag = ____
     BaseRelativePath = ____
-    DeleteRelativePath = ____
-    DeleteRelativePath = ____
+    ExcludeRelativePath = ____
+    ExcludeRelativePath = ____
         ...
 
-It is not necessary to write `DeleteRelativePath` in all sections.
+The base path for `LocalPath` is the folder where the setting file are located.
+
+It is not necessary to write `ExcludeRelativePath` in all sections.
 
 If you embed the settings in a part such as YAML,
 write a `#codediff` tag and codediff settings.
@@ -104,13 +109,11 @@ the depth of the line following the tag.
     This is a YAML file:
 
     diff: |  #codediff:
-        [New]
-        LocalPath = /home/user1/project1
-        DeleteRelativePath = _base
-
         [Old]
-        RepositoryURL = https://github.com/Takakiriy/example1
-        BranchOrTag = develop
+        LocalPath = _base
+        [New]
+        LocalPath = .
+        ExcludeRelativePath = _base
     This is out of codediff settings:
 
 ## Test

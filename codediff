@@ -40,7 +40,7 @@ function  Main() {
         MakeWorkingFolderIfNot  "${workingFolderPath}"
         OpenIDE  "${workingFolderPath}"  "${workingFolderPath}/.codediff.ini"
     else
-        ParseIniFile  "${workingFolderPath}/.codediff.ini"
+        ParseIniFile  "${workingFolderPath}/.codediff.ini"  "${iniFilePath}"
         CreateWorkingFiles  0  "${workingFolderPath}/working_0"
         CreateWorkingFiles  1  "${workingFolderPath}/working_1"
         CreateNewGitWorking  "${workingFolderPath}/working_0"  "${workingFolderPath}/working_1"
@@ -145,8 +145,8 @@ function  CreateWorkingFiles() {
     if [ "${localFullPath}" != "" ]; then
 
         local  excludeOptions="--exclude .git"
-        for  dexcludePath  in "${Setting_DeleteRelativePath[@]}"; do
-            excludeOptions="${excludeOptions}  --exclude \"${dexcludePath}\""
+        for  excludePath  in "${Setting_ExcludeRelativePath[@]}"; do
+            excludeOptions="${excludeOptions}  --exclude \"${excludePath}\""
         done
 
         CopyFolder  "${localFullPath}"  "${outputFolderPath}"  ${excludeOptions}
@@ -175,7 +175,7 @@ function  CreateWorkingFiles() {
         fi
 
         local  deletingPath=""
-        for  deletingPath  in "${Setting_DeleteRelativePath[@]}"; do
+        for  deletingPath  in "${Setting_ExcludeRelativePath[@]}"; do
             pushd  "${outputFolderPath}"  > /dev/null  ||  Error
 
             rm -rf  "${deletingPath}"
@@ -238,6 +238,7 @@ function  OpenIDE() {
 
 function  ParseIniFile() {
     local  iniFilePath="$1"
+    local  iniFileSourcePath="$2"  #// "" or path. It is necessary to specify in the case that iniFilePath is copy destination.
     ResetSetting
     StartTagParser  "${iniFilePath}"
     local  basePath="${iniFilePath%/*}"
@@ -256,7 +257,7 @@ function  ParseIniFile() {
 
         if [ "${lineType}" == "section" ]; then
             if [ "${settingName}" != "" ]; then
-                AppendSetting  "${settingName}"  "${localFullPath}"  "${repositoryURL}"  "${branchOrTag}"  "${baseRelativePath}"
+                AppendSetting  "${settingName}"  "${localFullPath}"  "${repositoryURL}"  "${branchOrTag}"  "${baseRelativePath}"  "${iniFileSourcePath}"
             fi
 
             settingName="$( ParseIniFileSectionName "${line}" )"
@@ -276,14 +277,14 @@ function  ParseIniFile() {
                 branchOrTag="${value}"
             elif [ "${name}" == "BaseRelativePath" ]; then
                 baseRelativePath="${value}"
-            elif [ "${name}" == "DeleteRelativePath" ]; then
-                Setting_DeleteRelativePath+=("${value}")
+            elif [ "${name}" == "ExcludeRelativePath" ]; then
+                Setting_ExcludeRelativePath+=("${value}")
             else
                 Error  "ERROR: Unknown parameter: ${name}."
             fi
         fi
     done
-    AppendSetting  "${settingName}"  "${localFullPath}"  "${repositoryURL}"  "${branchOrTag}"  "${baseRelativePath}"
+    AppendSetting  "${settingName}"  "${localFullPath}"  "${repositoryURL}"  "${branchOrTag}"  "${baseRelativePath}"  "${iniFileSourcePath}"
 
     if [ "${#Setting_Name[@]}" != 2 ]; then
         Error  "ERROR: section count must be 2 in ${workingFolderPath}/.codediff.ini file."
@@ -296,7 +297,7 @@ function  ResetSetting() {
     Setting_RepositoryURL=( )
     Setting_BranchOrTag=( )
     Setting_BaseRelativePath=( )
-    Setting_DeleteRelativePath=( )
+    Setting_ExcludeRelativePath=( )
 }
 
 function  AppendSetting() {
@@ -305,7 +306,12 @@ function  AppendSetting() {
     local  repositoryURL="$3"
     local  branchOrTag="$4"
     local  baseRelativePath="$5"
-    local  lastOfErrorMessage="in ${workingFolderPath}/.codediff.ini file."
+    local  iniFileSourcePath="$6"
+    if [ "${iniFileSourcePath}" == "" ]; then
+        local  lastOfErrorMessage="in ${workingFolderPath}/.codediff.ini file."
+    else
+        local  lastOfErrorMessage="in ${iniFileSourcePath} file."
+    fi
 
     if [ "${settingName}" == "" ]; then
         Error  "ERROR: Not specified section name ${lastOfErrorMessage}"
@@ -515,8 +521,10 @@ function  ParseIniFileLineType() {
         echo  "empty"
     elif [ "${head}" == "[" ]; then
         echo  "section"
-    else
+    elif  echo "${line}" | grep '=' > /dev/null; then
         echo  "parameter"
+    else
+        echo  "unknown"
     fi
 }
 
@@ -649,6 +657,6 @@ Setting_LocalFullPath=( )
 Setting_RepositoryURL=( )
 Setting_BranchOrTag=( )
 Setting_BaseRelativePath=( )
-Setting_DeleteRelativePath=( )
+Setting_ExcludeRelativePath=( )
 
 Main "$@"

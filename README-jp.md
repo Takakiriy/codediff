@@ -13,7 +13,7 @@ Git リポジトリのURLや、差分の設定ファイルを指定すること�
 
 ### codediff コマンドに比較対象を指定する場合
 
-    codediff  path/to/folder1  path/to/folder2
+    codediff  path/to/old/folder  path/to/new/folder
 
 または
 
@@ -51,7 +51,7 @@ Git リポジトリのURLや、差分の設定ファイルを指定すること�
     codediff  codediff.ini
 
 - 設定ファイルを `~/_tmp/_diff/1/.codediff.ini` にコピーして読み取ります。
-    このとき、`LocalPath` パラメーターは フル パス に置き換わります
+    コピーした先のファイルの `LocalPath` パラメーターは フル パス に置き換わります。
 - `~/_tmp/_diff/1/working` に `.git` フォルダーを作り、差分のコミットを作ります
 - Visual Studio Code が開きます
 - Source Control ビューに切り替えて、差分を確認してください
@@ -63,22 +63,23 @@ Git リポジトリのURLや、差分の設定ファイルを指定すること�
 
     # codediff command setting file
 
-    [New]
-    LocalPath = /home/user1/project1
-    DeleteRelativePath = _base
-
     [Old]
     RepositoryURL = https://github.com/Takakiriy/example1
     BranchOrTag = develop
 
+    [New]
+    LocalPath = /home/user1/project1
+    ExcludeRelativePath = _base
+
 下記の書式の設定を 2つ並べます。
+新旧2つのフォルダーやファイルを比較する場合、1つ目が古いもの、2つ目が新しいものを指定します。
 
 ローカルの他のフォルダーからコピーする場合：
 
     [__CommitMessage__]
     LocalPath = ____
-    DeleteRelativePath = ____
-    DeleteRelativePath = ____
+    ExcludeRelativePath = ____
+    ExcludeRelativePath = ____
         ...
     
 Git リポジトリ からダウンロードする場合：
@@ -87,11 +88,13 @@ Git リポジトリ からダウンロードする場合：
     RepositoryURL = ____
     BranchOrTag = ____
     BaseRelativePath = ____
-    DeleteRelativePath = ____
-    DeleteRelativePath = ____
+    ExcludeRelativePath = ____
+    ExcludeRelativePath = ____
         ...
 
-`DeleteRelativePath` は全てのセクションに書く必要はありません。
+`LocalPath` の基準パスは、設定ファイルがあるフォルダーです。
+
+`ExcludeRelativePath` は全てのセクションに書く必要はありません。
 
 設定を YAML などの一部に埋め込む場合、`#codediff` タグ を書き、
 そのタグの次の行のインデントより浅くなる行の前までが codediff の設定になります。
@@ -99,13 +102,11 @@ Git リポジトリ からダウンロードする場合：
     This is a YAML file:
 
     diff: |  #codediff:
-        [New]
-        LocalPath = /home/user1/project1
-        DeleteRelativePath = _base
-
         [Old]
-        RepositoryURL = https://github.com/Takakiriy/example1
-        BranchOrTag = develop
+        LocalPath = _base
+        [New]
+        LocalPath = .
+        ExcludeRelativePath = _base
     This is out of codediff settings:
 
 
