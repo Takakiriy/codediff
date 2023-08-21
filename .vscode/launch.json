@@ -15,7 +15,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/codediff",
             "cwd": "${workspaceFolder}/test",
-            "args": []
+            "args": ["--test"]
         }
     ]
 }
