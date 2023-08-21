@@ -142,15 +142,18 @@ function  CreateWorkingFiles() {
     local  baseRelativePath="${Setting_BaseRelativePath[${index}]}"
 
     rm -rf  "${outputFolderPath}"
-    if [ "${localFullPath}" != "" ]; then
+    if [ "${localFullPath}" != "" ]; then  #// Copy
 
-        local  excludeOptions="--exclude .git"
+        local  excludeOptions=""
         for  excludePath  in "${Setting_ExcludeRelativePath[@]}"; do
             excludeOptions="${excludeOptions}  --exclude \"${excludePath}\""
         done
 
         CopyFolder  "${localFullPath}"  "${outputFolderPath}"  ${excludeOptions}
-    else
+        if [ -e "${outputFolderPath}/.git" ]; then
+            mv  "${outputFolderPath}/.git"  "${outputFolderPath}/.git_"
+        fi
+    else  #// git clone
         local  options=""
         if [ "${branchOrTag}" != "" ]; then
             options="${options}  -b ${branchOrTag}"
@@ -162,6 +165,7 @@ function  CreateWorkingFiles() {
         elif [ "${baseRelativePath:0:2}" == ".." ]; then
             Error  "ERROR: BaseRelativePath cannot be set a parent folder."
         else
+            test  "$( LessThanVersion "$(git --version)" "2.26.0" )"  == "${False}"  ||  Error  "ERROR: Requires git 2.26.0 or higher"
             git clone  --filter=blob:none --sparse  "${repositoryURL}" ${options} \
                 "${WorkingFolderPathDefault}/workingOfWorking"  ||  Error
             pushd  "${WorkingFolderPathDefault}/workingOfWorking"  > /dev/null  ||  Error
@@ -200,16 +204,16 @@ function  CreateNewGitWorking() {
     popd  > /dev/null
     mv  "${workingFolderPath}/working/.git"  "${oldContentsPath}"  ||  Error
     pushd  "${oldContentsPath}"  > /dev/null  ||  Error
-    find "." -type f  |  xargs  -I {} \
-        chmod 444 "{}"
+    SetReadOnly  "."
+    SetNotReadOnly  ".git"
 
     git add "."
     git commit -m "${Setting_Name[0]}"  > /dev/null  2>&1  ||  Error
     popd  > /dev/null
     mv  "${oldContentsPath}/.git"  "${newContentsPath}"  ||  Error
     pushd  "${newContentsPath}"  > /dev/null  ||  Error
-    find "." -type f  |  grep -vE "^./.git/"  |  xargs  -I {} \
-        chmod 444 "{}"
+    SetReadOnly  "."
+    SetNotReadOnly  ".git"
 
     git add "."
     git commit -m "${Setting_Name[1]}"  > /dev/null  2>&1  || Error
@@ -219,8 +223,8 @@ function  CreateNewGitWorking() {
 
     git checkout "."  > /dev/null  2>&1  ||  Error
     git reset --soft HEAD^  ||  Error
-    find "." -type f  |  grep -vE "^./.git/"  |  xargs  -I {} \
-        chmod 444 "{}"
+    SetReadOnly  "."
+    SetNotReadOnly  ".git"
     popd  > /dev/null
 }
 
@@ -380,6 +384,76 @@ function  ParsingIsActive() {
         return  "${True}"
     else
         return  "${False}"
+    fi
+}
+
+function  IsWindowsFile() {  #// Shared file with Windows in Linux process
+    local  filePath="$1"
+    if [ -d "${filePath}" ]; then Error ;fi
+    if df -h "${filePath}"  |  grep -E '/dev/' > /dev/null; then  #// Linux file system
+        return "${False}"  #// Linux file
+    else
+        return "${True}"  #// Windows file
+    fi
+}
+
+function  SetReadOnly() {
+    SetReadOnlyOrNot --set-read-only  "$@"
+}
+
+function  SetNotReadOnly() {
+    SetReadOnlyOrNot --set-not-read-only  "$@"
+}
+
+if [ "${READ_ONLY_CHMOD}" == "" ]; then
+    READ_ONLY_CHMOD="a-w"   #// For Linux only
+fi
+if [ "${NOT_READ_ONLY_CHMOD}" == "" ]; then
+    NOT_READ_ONLY_CHMOD="u+w"   #// For Linux only
+fi
+
+function  SetReadOnlyOrNot() {
+    local  operation="$1"
+    local  fileOrFolderPath="$2"
+
+    if [ -f "${fileOrFolderPath}" ]; then
+        local  filePath="${fileOrFolderPath}"
+        if [ "${operation}" == "--set-read-only" ]; then
+            if IsWindowsFile "${filePath}"; then
+
+                chmod 444  "${filePath}"
+            else
+                chmod ${READ_ONLY_CHMOD}  "${filePath}"
+            fi
+        elif [ "${operation}" == "--set-not-read-only" ]; then
+            if IsWindowsFile "${filePath}"; then
+
+                chmod 777  "${filePath}"
+            else
+                chmod ${NOT_READ_ONLY_CHMOD}  "${filePath}"
+            fi
+        fi
+
+    elif [ -d "${fileOrFolderPath}" ]; then
+        local  folderPath="${fileOrFolderPath}"
+        local  filePaths="$( find "${folderPath}"  -type f )"
+        local  firstFilePath="$( echo  "${filePaths}"  |  head -1 )"
+        if [ "${firstFilePath}" != "" ]; then
+            if [ "${operation}" == "--set-read-only" ]; then
+                if IsWindowsFile "${firstFilePath}"; then
+                    echo  "${filePaths}"  |  xargs -I{} chmod 444 "{}"
+                else
+                    echo  "${filePaths}"  |  xargs -I{} chmod ${READ_ONLY_CHMOD} "{}"
+                fi
+            elif [ "${operation}" == "--set-not-read-only" ]; then
+                if IsWindowsFile "${firstFilePath}"; then
+
+                    echo  "${filePaths}"  |  xargs -I{} chmod 777 "{}"
+                else
+                    echo  "${filePaths}"  |  xargs -I{} chmod ${NOT_READ_ONLY_CHMOD} "{}"
+                fi
+            fi
+        fi
     fi
 }
 

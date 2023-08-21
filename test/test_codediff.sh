@@ -16,11 +16,13 @@ unset PositionalArgs
 function  Main() {
     TestParameters
     TestLocal
+    # TestLocalBranch
     TestGitRepository
     TestGitRepositorySubFolder
     TestOfDelete
     TestInText
     TestCopyFolder
+
     EndOfTest
 }
 
@@ -50,6 +52,33 @@ function  TestParameters() {
     if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "git a1" ]; then  TestError  "3"  ;fi
     rm -rf  "$HOME/_tmp/_diff"
     rm -f  "_codediff.log"
+}
+
+function  TestLocalBranch() {
+    echo  ""
+    echo  "TestLocalBranch =================================="
+
+    #// Set up local repository
+    rm -rf  "${ProjectPath}/test/_repository.git"
+
+    git init --bare --shared=true  "${ProjectPath}/test/_repository.git"
+    rm -rf  "${ProjectPath}/test/_work"
+    mkdir   "${ProjectPath}/test/_work"
+    cd      "${ProjectPath}/test/_work"
+    echo  "aaa" > "a.txt"
+    git init
+    git add  "."
+    git commit -m "First commit"
+    git remote add origin  file://${ProjectPath}/test/_repository.git
+
+    git push --set-upstream origin master
+    git checkout -b  feature
+    echo  "fff" > "a.txt"
+    git add  "."
+    git commit -m "Feature commit"
+
+    git push --set-upstream origin feature
+Error  "not implemented"
 }
 
 function  TestLocal() {
@@ -163,39 +192,41 @@ function  TestInText() {
 }
 
 function  TestCopyFolder() {
+    echo  ""
+    echo  "TestCopyFolder =================================="
     MakeCopySource  "_work/source"
 
     CopyFolder  "_work/source"  "_work/destination"
     pushd  "_work/destination"  >  /dev/null
-    local  result="$( find . )"
+    local  result="$( find .  |  sort )"
     popd  >  /dev/null
 local  answer=".
+./a.txt
+./build
+./build/_do_not_copy
 ./empty
 ./empty/s
 ./sub1
 ./sub1/s
 ./sub1/s/a.txt
-./a.txt
 ./sub2
 ./sub2/s
 ./sub2/s/a.txt
 ./sub2/s/build
-./sub2/s/build/_do_not_copy
-./build
-./build/_do_not_copy"
+./sub2/s/build/_do_not_copy"
     test  "${result}" == "${answer}"  ||  Error
     rm -rf  "_work/destination"
 
     CopyFolder  "_work/source"  "_work/destination"  --exclude build  --exclude sub2/s/build  --exclude empty/s
     pushd  "_work/destination"  >  /dev/null
-    local  result="$( find . )"
+    local  result="$( find .  |  sort  )"
     popd  >  /dev/null
 local  answer=".
+./a.txt
 ./empty
 ./sub1
 ./sub1/s
 ./sub1/s/a.txt
-./a.txt
 ./sub2
 ./sub2/s
 ./sub2/s/a.txt"
@@ -312,6 +343,45 @@ function  ScanEmptyFolderPaths() {
     echo  "${emptyFolderPaths}"
 }
 
+function  gitInitOption() {
+    if [ "$( LessThanVersion "$(git --version)" "2.31.1" )" == "${True}" ]; then
+        echo  ""
+    else
+        echo  "-bmain"  #// "-b main" occurs an error in bash debug
+    fi
+}
+
+# LessThanVersion
+#     if [ "$( LessThanVersion "$(git --version)" "2.31.1")" == "${True}" ]; then
+function  LessThanVersion() {
+    local  textContainsVersionA="$1"
+    local  textContainsVersionB="$2"
+    local  isGoodFormat="${True}"
+    echo "${textContainsVersionA}" | grep -e "[0-9]\+\.[0-9]\+\.[0-9]\+" > /dev/null  ||  isGoodFormat="${False}"
+    echo "${textContainsVersionB}" | grep -e "[0-9]\+\.[0-9]\+\.[0-9]\+" > /dev/null  ||  isGoodFormat="${False}"
+    if [ "${isGoodFormat}" == "${False}" ]; then
+        Error  "\"${textContainsVersionA}\" or \"${textContainsVersionB}\" is not semantic version."
+    fi
+
+    local  numbersA=( $( echo "${textContainsVersionA}" | grep -o -e "[0-9]\+" ) )
+    local  numbersB=( $( echo "${textContainsVersionB}" | grep -o -e "[0-9]\+" ) )
+    if [ "${numbersA[0]}" -lt "${numbersB[0]}" ]; then
+        echo "${True}"
+        return
+    elif [ "${numbersA[0]}" == "${numbersB[0]}" ]; then
+        if [ "${numbersA[1]}" -lt "${numbersB[1]}" ]; then
+            echo "${True}"
+            return
+        elif [ "${numbersA[1]}" == "${numbersB[1]}" ]; then
+            if [ "${numbersA[2]}" -lt "${numbersB[2]}" ]; then
+                echo "${True}"
+                return
+            fi
+        fi
+    fi
+    echo "${False}"
+}
+
 function  CutLastOf() {
     local  wholeString="$1"
     local  lastExpected="$2"
@@ -340,6 +410,60 @@ function  AssertReadOnly() {
 
     if [ "${writable}" == "${True}" ]; then
         Error  "ERROR: Not read only file \"${path}\""
+    fi
+}
+
+# pp
+#     Debug print
+# Example:
+#     pp "$config"
+#     pp "$config" config
+#     pp "$array" array  ${#array[@]}  "${array[@]}"
+#     pp "123"
+#     $( pp "$config" >&2 )
+function  pp() {
+    local  value="$1"
+    local  variableName="$2"
+    if [ "${variableName}" != "" ]; then  variableName=" ${variableName} "  ;fi  #// Add spaces
+    local  oldIFS="$IFS"
+    IFS=$'\n'
+    local  valueLines=( ${value} )
+    IFS="$oldIFS"
+
+    local  type=""
+    if [ "${variableName}" != "" ]; then
+        if [[ "$(declare -p ${variableName} 2>&1 )" =~ "declare -a" ]]; then
+            local  type="array"
+        fi
+    fi
+    if [ "${type}" == "" ]; then
+        if [ "${#valueLines[@]}" == 1  -o  "${#valueLines[@]}" == 0 ]; then
+            local  type="oneLine"
+        else
+            local  type="multiLine"
+        fi
+    fi
+
+    if [[ "${type}" == "oneLine" ]]; then
+        echo  "@@@${variableName}= \"${value}\" ---------------------------"  >&2
+    elif [[ "${type}" == "multiLine" ]]; then
+        echo  "@@@${variableName}---------------------------"  >&2
+        echo  "\"${value}\"" >&2
+    elif [[ "${type}" == "array" ]]; then
+        echo  "@@@${variableName}---------------------------"  >&2
+        local  count="$3"
+        if [ "${count}" == "" ]; then
+            echo  "[0]: \"$4\""  >&2
+            echo  "[1]: ERROR: pp parameter is too few"  >&2
+        else
+            local  i=""
+            for (( i = 0; i < ${count}; i += 1 ));do
+                echo  "[$i]: \"$4\""  >&2
+                shift
+            done
+        fi
+    else
+        echo  "@@@${variableName}? ---------------------------"  >&2
     fi
 }
 
@@ -377,6 +501,7 @@ function  EndOfTest() {
     fi
 }
 
+GitInitOption=$(gitInitOption)
 True=0
 False=1
 if [ "${Options_ManualTest}" != "" ]; then
