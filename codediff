@@ -114,6 +114,9 @@ function  CopyIniFile() {
     #// Replace "LocalPath" parameter to full path.
     local  iniFilePath="$1"
     local  basePath="${iniFilePath%/*}"
+    if [ "${basePath}" == "${iniFilePath}" ]; then
+        basePath="."
+    fi
     mkdir -p  "${WorkingFolderPath}"
     local  line=""
     local  settingIniFileLines=( )  &&  while IFS= read -r line ;do  settingIniFileLines+=("$line") ;done < "${iniFilePath}"

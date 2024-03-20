@@ -42,7 +42,7 @@ function  TestParameters() {
 
     ../codediff  ${TestOption}  \
         "https://github.com/Takakiriy/codediff#example_1"  \
-        "https://github.com/Takakiriy/codediff#example_2"
+        "https://github.com/Takakiriy/codediff#example_2"  ||  Error
     if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "git a2" ]; then  TestError  "2"  ;fi
     AssertReadOnly  "${workingFolderPath}/working/a.txt"
     Pause  "OK? Close Visual Studio Code"
@@ -71,7 +71,7 @@ function  TestLocal() {
     CopyIniFileTemplate  "files/1_codediff.ini"  "${workingFolderPath}"
     Pause  "Next: Check opening the working folder."
 
-    ../codediff  ${TestOption}
+    ../codediff  ${TestOption}  ||  Error
     if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "a2" ]; then  TestError  "2"  ;fi
     AssertReadOnly  "${workingFolderPath}/working/a.txt"
     Pause  "OK? Close Visual Studio Code"
@@ -91,7 +91,7 @@ function  TestGitRepository() {
     CopyIniFileTemplate  "files/2_repository_codediff.ini"  "${workingFolderPath}"
     Pause  "Next: Check opening the working folder."
 
-    ../codediff  ${TestOption}
+    ../codediff  ${TestOption}  ||  Error
     if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "git a2" ]; then  TestError  "2"  ;fi
     AssertReadOnly  "${workingFolderPath}/working/a.txt"
     Pause  "OK? Close Visual Studio Code"
@@ -111,7 +111,7 @@ function  TestGitRepositorySubFolder() {
     CopyIniFileTemplate  "files/3_sub_folder_codediff.ini"  "${workingFolderPath}"
     Pause  "Next: Check opening the working folder."
 
-    ../codediff  ${TestOption}
+    ../codediff  ${TestOption}  ||  Error
     if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "git sub 2" ]; then  TestError  "2"  ;fi
     AssertReadOnly  "${workingFolderPath}/working/a.txt"
     Pause  "OK? Close Visual Studio Code"
@@ -131,7 +131,7 @@ function  TestOfDelete() {
     CopyIniFileTemplate  "files/4_delete_codediff.ini"  "${workingFolderPath}"
     Pause  "Next: Check opening the working folder."
 
-    ../codediff  ${TestOption}
+    ../codediff  ${TestOption}  ||  Error
     if [ "$( cat "${workingFolderPath}/working/d.txt" )" != "d2" ]; then  TestError  "2"  ;fi
     AssertNotExist  "${workingFolderPath}/working/dd.txt"
     AssertNotExist  "${workingFolderPath}/working/sub_d"
@@ -144,22 +144,30 @@ function  TestOfDelete() {
 }
 
 function  TestInText() {
-    echo  ""
-    echo  "TestInText =================================="
-    local  workingFolderPath="$HOME/_tmp/_diff/1"
-    rm -rf  "$HOME/_tmp/_diff"
-    rm -f  "_codediff.log"
-    mkdir -p  "${workingFolderPath}"
+    for iCase in {1..2}; do
+        echo  ""
+        echo  "TestInText ${iCase} =================================="
+        local  workingFolderPath="$HOME/_tmp/_diff/1"
+        rm -rf  "$HOME/_tmp/_diff"
+        rm -f  "_codediff.log"
+        mkdir -p  "${workingFolderPath}"
 
-    echo  "old setting"  >  "${workingFolderPath}/.codediff.ini"
+        echo  "old setting"  >  "${workingFolderPath}/.codediff.ini"
+        if [ "${iCase}" == 1 ]; then
 
-    ../codediff  ${TestOption}  "files/5_codediff_in_text.yaml"
-    if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "a2" ]; then  TestError  "2"  ;fi
-    AssertReadOnly  "${workingFolderPath}/working/a.txt"
-    ChangeToOldCommit
-    if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "a1" ]; then  TestError  "3"  ;fi
-    rm -rf  "$HOME/_tmp/_diff"
-    rm -f  "_codediff.log"
+            ../codediff  ${TestOption}  "files/5_codediff_in_text.yaml"  ||  Error
+        elif [ "${iCase}" == 2 ]; then
+            pushd  "files" > /dev/null  ||  Error
+            ../../codediff  ${TestOption}  "5_codediff_in_text.yaml"  ||  Error
+            popd > /dev/null  ||  Error
+        fi
+        if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "a2" ]; then  TestError  "2"  ;fi
+        AssertReadOnly  "${workingFolderPath}/working/a.txt"
+        ChangeToOldCommit
+        if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "a1" ]; then  TestError  "3"  ;fi
+        rm -rf  "$HOME/_tmp/_diff"
+        rm -f  "_codediff.log"
+    done
 }
 
 function  TestCopyFolder() {
