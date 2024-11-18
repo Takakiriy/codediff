@@ -627,6 +627,8 @@ function  GetWslPathFromWindowsPath() {
 
     if [ "${windowsSlashPath:0:3}" == "C:/" ] || [ "${windowsSlashPath:0:3}" == "c:/" ] && [ "${WslMnt}" != "" ]; then
         echo  "${WslMnt}/c/${windowsSlashPath:3}"
+    elif [ "${windowsSlashPath:0:3}" == "/c/" ] && [ "${WslMnt}" != "" ]; then
+        echo  "${WslMnt}${windowsSlashPath}"
     else
         echo  "${windowsSlashPath}"
     fi
