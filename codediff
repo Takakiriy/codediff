@@ -4,7 +4,7 @@ ThisScriptParentPath="$( readlink -f "${0%/*}" )"
 # codediff command
 #    diff tool for Visual Studio Code git diff mode
 
-WorkingFolderPathDefault="$HOME/_tmp/_diff/1"
+WorkingFolderPathDefault="~/_tmp/_diff/1"
 if [ -e "/Applications/Visual Studio Code.app" ]; then
     VisualStudioCodePath="/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"
 elif [ -e "${HOME}/AppData/Local/Programs/Microsoft VS Code" ]; then
@@ -29,6 +29,8 @@ function  Main() {
     local  iniFilePath="$1"
     local  comparePathA="$1"  #// $1 is shared
     local  comparePathB="$2"
+    ModifyGlobalVariables
+    iniFilePath="$( GetWslPathFromWindowsPath "${iniFilePath}" )"
 
     if [ "${comparePathA}" != ""  -a  "${comparePathB}" != "" ]; then
         MakeIniFileFromParameters  "${comparePathA}"  "${comparePathB}" 
@@ -199,6 +201,7 @@ function  CreateNewGitWorking() {
     local  newContentsPath="$2"
     AssertNotExist  "${oldContentsPath}/.git"
     AssertNotExist  "${newContentsPath}/.git"
+    local  gitLogPath="${WorkingFolderPath}/_git.log"
 
     rm -rf "${WorkingFolderPath}/working"
     mkdir  "${WorkingFolderPath}/working"
@@ -214,7 +217,8 @@ function  CreateNewGitWorking() {
         chmod 444 "{}"
 
     git add "."
-    git commit -m "${Setting_Name[0]}"  > /dev/null  2>&1  ||  Error
+    git commit -m "${Setting_Name[0]}"  > "${gitLogPath}"  2>&1  ||  Error  "ERROR: Failed git commit in \"${PWD}\". git output: $( cat "${gitLogPath}" )"
+    rm  "${gitLogPath}"
     popd  > /dev/null
     mv  "${oldContentsPath}/.git"  "${newContentsPath}"  ||  Error
     pushd  "${newContentsPath}"  > /dev/null  ||  Error
@@ -222,7 +226,8 @@ function  CreateNewGitWorking() {
         chmod 444 "{}"
 
     git add "."
-    git commit -m "${Setting_Name[1]}"  > /dev/null  2>&1  || Error
+    git commit -m "${Setting_Name[1]}"  > "${gitLogPath}"  2>&1  ||  Error  "ERROR: Failed git commit in \"${PWD}\". git output: $( cat "${gitLogPath}" )"
+    rm  "${gitLogPath}"
     popd  > /dev/null
     mv  "${newContentsPath}/.git"  "${WorkingFolderPath}/working"  ||  Error
     pushd  "${WorkingFolderPath}/working"  > /dev/null  ||  Error
@@ -237,6 +242,8 @@ function  CreateNewGitWorking() {
 function  OpenIDE() {
     local  openingFolderPath="$1"
     local  secondPath="$2"
+    openingFolderPath="$( GetWindowsPathFromWslPath "${openingFolderPath}" )"
+    secondPath="$( GetWindowsPathFromWslPath "${secondPath}" )"
     if [ "${Options_Test}" != "" ]; then
         echo  "OpenIDE \"${openingFolderPath}\""  >  "_codediff.log"
     else
@@ -488,11 +495,17 @@ function  GetFullPath() {
         basePath=${basePath%/*}
         basePath=${basePath%/*}
     fi
+    local  isFullPath="false"
+    if [ "${relativePath:0:1}" == "/" ] || [ "${relativePath:0:1}" == "$" ]; then
+        isFullPath="true"
+    elif [ "${relativePath:0:3}" == 'c:/' ] || [ "${relativePath:0:3}" == 'c:\' ] || [ "${relativePath:0:3}" == 'C:/' ] || [ "${relativePath:0:3}" == 'C:\' ]; then
+        isFullPath="true"
+    fi
 
-    if [ "${relativePath:0:1}" != "/"  -a  "${relativePath:0:1}" != '$' ]; then
-        local  fullPath="$( readlink -f  "${basePath}/${relativePath}" )"
-    else
+    if [ "${isFullPath}" == "true" ]; then
         local  fullPath="${relativePath}"
+    else
+        local  fullPath="$( readlink -f  "${basePath}/${relativePath}" )"
     fi
     fullPath="$( eval echo "${fullPath}" )"  #// Evaluate variables
     if [ "${fullPath}" == "" ]; then
@@ -608,6 +621,27 @@ function  Evaluate() {
     eval echo "$( eval echo '\""${expression}"\"' )"
 }
 
+function  GetWslPathFromWindowsPath() {
+    local  windowsPath="$1"
+    local  windowsSlashPath="$( echo "${windowsPath}" | sed 's/\\/\//g' )"
+
+    if [ "${windowsSlashPath:0:3}" == "C:/" ] || [ "${windowsSlashPath:0:3}" == "c:/" ] && [ "${WslMnt}" != "" ]; then
+        echo  "${WslMnt}/c/${windowsSlashPath:3}"
+    else
+        echo  "${windowsSlashPath}"
+    fi
+}
+
+function  GetWindowsPathFromWslPath() {
+    local  wslPath="$1"
+
+    if [ "${WslMnt}" != "" ] && [ "${wslPath:0:7}" == "${WslMnt}/c/" ] ; then
+        echo  "C:${wslPath:6}"
+    else
+        echo  "${wslPath}"
+    fi
+}
+
 function  AssertExist() {
     local  path="$1"
     local  leftOfWildcard="${path%\**}"
@@ -656,7 +690,29 @@ function  Error() {
     if [ "${exitCode}" == "" ]; then  exitCode=2  ;fi
 
     echo  "${errorMessage}" >&2
+    if [ "${MSYSTEM}" == "MINGW64" ]; then
+        echo  "[Advice] Git bash is flaky on Windows. Install WSL2 and input the command: wsl __CommadAndParameters__"
+    fi
     exit  "${exitCode}"
+}
+
+function  ModifyGlobalVariables() {
+    if [ "${USERPROFILE}" == "" ]; then  #// for WSL2
+        if [ "${USERNAME}" == "" ]; then  #// If USERNAME was not defined in parent script
+            export USERNAME="$( /mnt/c/WINDOWS/system32/cmd.exe /c 'echo %USERNAME%'  2> /dev/null )"
+            export USERNAME="${USERNAME:0:${#USERNAME}-1}"  #// Cut last CR
+        fi
+        export USERPROFILE="/mnt/c/Users/${USERNAME}"
+    else
+        export USERPROFILE="$( echo "${USERPROFILE}" | sed 's/\\/\//g' )"
+    fi
+    if [ "${PWD:0:7}" == "/mnt/c/" ]; then
+        WslMnt="/mnt"
+    fi
+
+    #// Expand ~
+    WorkingFolderPathDefault="$( echo "${WorkingFolderPathDefault}"  |  sed -E "s|^~|${USERPROFILE}|" )"
+    WorkingFolderPath="$( echo "${WorkingFolderPath}"  |  sed -E "s|^~|${USERPROFILE}|" )"
 }
 
 True=0

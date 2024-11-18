@@ -29,6 +29,40 @@ You can also specify paths and URL to compare.
 - Visual Studio Code is opened
 - Please change to Source Control view and show difference
 
+If you specify the full path in Windows Git bash or PowerShell, start with `/c/`.
+
+### If codediff command has a setting file path parameter
+
+    codediff  codediff.ini
+
+or
+
+    codediff  codediff.yaml
+
+- Copy the specified setting file to `~/_tmp/_diff/1/.codediff.ini` and read it.
+    `LocalPath` parameter in the destination file will be replaced to
+    the full path.
+- `.git` folder is created in `~/_tmp/_diff/1/working` and Git commit difference is created
+- Visual Studio Code is opened
+- Please change to Source Control view and show difference
+
+If you specify the full path in Windows Git bash or PowerShell, start with `/c/`.
+
+If you embed the settings in a part such as YAML,
+write a `#codediff` tag and codediff settings.
+The settings are until it becomes shallower than
+the depth of the line following the tag.
+
+    This is a YAML file:
+
+    diff: |  #codediff:
+        [Old]
+        LocalPath = _base
+        [New]
+        LocalPath = .
+        ExcludeRelativePath = _base
+    This is out of codediff settings:
+
 ### If there is not command parameterｓ and there is not `~/_tmp/_diff/1/.codediff.ini` file
 
     codediff
@@ -45,17 +79,6 @@ You can also specify paths and URL to compare.
     codediff
 
 - Read `~/_tmp/_diff/1/.codediff.ini` file
-- `.git` folder is created in `~/_tmp/_diff/1/working` and Git commit difference is created
-- Visual Studio Code is opened
-- Please change to Source Control view and show difference
-
-### If codediff command has a setting file path parameter
-
-    codediff  codediff.ini
-
-- Copy the specified setting file to `~/_tmp/_diff/1/.codediff.ini` and read it.
-    `LocalPath` parameter in the destination file will be replaced to
-    the full path.
 - `.git` folder is created in `~/_tmp/_diff/1/working` and Git commit difference is created
 - Visual Studio Code is opened
 - Please change to Source Control view and show difference
@@ -101,23 +124,18 @@ The base path for `LocalPath` is the folder where the setting file are located.
 
 It is not necessary to write `ExcludeRelativePath` in all sections.
 
-If you embed the settings in a part such as YAML,
-write a `#codediff` tag and codediff settings.
-The settings are until it becomes shallower than
-the depth of the line following the tag.
-
-    This is a YAML file:
-
-    diff: |  #codediff:
-        [Old]
-        LocalPath = _base
-        [New]
-        LocalPath = .
-        ExcludeRelativePath = _base
-    This is out of codediff settings:
-
 ## Test
+
+### Commands
 
     cd  test
     ./test_codediff.sh
     ./test_codediff.sh --manual-test
+
+### Case of Windows git bash
+
+You can install and run WSL. It will be stable.
+
+    cd  test
+    wsl ./test_codediff.sh
+    wsl ./test_codediff.sh --manual-test

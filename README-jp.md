@@ -26,6 +26,37 @@ Git リポジトリのURLや、差分の設定ファイルを指定すること�
 - Visual Studio Code が開きます
 - Source Control ビューに切り替えて、差分を確認してください
 
+Windows Git bash または PowerShell でフルパスを指定する場合は、`/c/` から始めてください。
+
+### codediff コマンドに設定ファイルのパスを指定した場合
+
+    codediff  codediff.ini
+
+または
+
+    codediff  codediff.yaml
+
+- 設定ファイルを `~/_tmp/_diff/1/.codediff.ini` にコピーして読み取ります。
+    コピーした先のファイルの `LocalPath` パラメーターは フル パス に置き換わります。
+- `~/_tmp/_diff/1/working` に `.git` フォルダーを作り、差分のコミットを作ります
+- Visual Studio Code が開きます
+- Source Control ビューに切り替えて、差分を確認してください
+
+Windows Git bash または PowerShell でフルパスを指定する場合は、`/c/` から始めてください。
+
+設定を YAML などの一部に埋め込む場合、`#codediff` タグ を書き、
+そのタグの次の行のインデントより浅くなる行の前までが codediff の設定になります。
+
+    This is a YAML file:
+
+    diff: |  #codediff:
+        [Old]
+        LocalPath = _base
+        [New]
+        LocalPath = .
+        ExcludeRelativePath = _base
+    This is out of codediff settings:
+
 ### コマンドのパラメーターなしで、`~/_tmp/_diff/1/.codediff.ini` ファイルが無い場合
 
     codediff
@@ -45,17 +76,6 @@ Git リポジトリのURLや、差分の設定ファイルを指定すること�
 - `~/_tmp/_diff/1/working` に`.git` フォルダーを作り、差分のコミットを作ります
 - Visual Studio Code が開きます
 - Source Control ビューに切り替えて、差分を確認してください
-
-### codediff コマンドに設定ファイルのパスを指定した場合
-
-    codediff  codediff.ini
-
-- 設定ファイルを `~/_tmp/_diff/1/.codediff.ini` にコピーして読み取ります。
-    コピーした先のファイルの `LocalPath` パラメーターは フル パス に置き換わります。
-- `~/_tmp/_diff/1/working` に `.git` フォルダーを作り、差分のコミットを作ります
-- Visual Studio Code が開きます
-- Source Control ビューに切り替えて、差分を確認してください
-
 
 ## 設定ファイル
 
@@ -96,22 +116,18 @@ Git リポジトリ からダウンロードする場合：
 
 `ExcludeRelativePath` は全てのセクションに書く必要はありません。
 
-設定を YAML などの一部に埋め込む場合、`#codediff` タグ を書き、
-そのタグの次の行のインデントより浅くなる行の前までが codediff の設定になります。
-
-    This is a YAML file:
-
-    diff: |  #codediff:
-        [Old]
-        LocalPath = _base
-        [New]
-        LocalPath = .
-        ExcludeRelativePath = _base
-    This is out of codediff settings:
-
-
 ## テスト
+
+### コマンド
 
     cd  test
     ./test_codediff.sh
     ./test_codediff.sh --manual-test
+
+### Windows git bash の場合
+
+WSL2 をインストールして実行すると安定します。
+
+    cd  test
+    wsl ./test_codediff.sh
+    wsl ./test_codediff.sh --manual-test

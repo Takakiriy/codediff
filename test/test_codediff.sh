@@ -14,6 +14,8 @@ set -- "${PositionalArgs[@]}"  #// set $1, $2, ...
 unset PositionalArgs
 
 function  Main() {
+    ModifyGlobalVariables
+
     TestParameters
     TestLocal
     TestGitRepository
@@ -27,13 +29,13 @@ function  Main() {
 function  TestParameters() {
     echo  ""
     echo  "TestParameters =================================="
-    local  workingFolderPath="$HOME/_tmp/_diff/1"
+    local  workingFolderPath="${USERPROFILE}/_tmp/_diff/1"
 
-    rm -rf  "$HOME/_tmp/_diff"
+    rm -rf  "${USERPROFILE}/_tmp/_diff"
     rm -f  "_codediff.log"
     Pause  "Next: Check opening a Visual Studio Code and select Source Control view (git)."
 
-    ../codediff  ${TestOption}  "files/repository_1"  "files/repository_2"
+    ../codediff  ${TestOption}  "files/repository_1"  "files/repository_2"  ||  Error
     if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "a2" ]; then  TestError  "2"  ;fi
     AssertReadOnly  "${workingFolderPath}/working/a.txt"
     Pause  "OK? Close Visual Studio Code"
@@ -48,17 +50,17 @@ function  TestParameters() {
     Pause  "OK? Close Visual Studio Code"
     ChangeToOldCommit
     if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "git a1" ]; then  TestError  "3"  ;fi
-    rm -rf  "$HOME/_tmp/_diff"
+    rm -rf  "${USERPROFILE}/_tmp/_diff"
     rm -f  "_codediff.log"
 }
 
 function  TestLocal() {
     echo  ""
     echo  "TestLocal =================================="
-    local  workingFolderPath="$HOME/_tmp/_diff/1"
+    local  workingFolderPath="${USERPROFILE}/_tmp/_diff/1"
 
     #// 1st command
-    rm -rf  "$HOME/_tmp/_diff"
+    rm -rf  "${USERPROFILE}/_tmp/_diff"
     rm -f  "_codediff.log"
     Pause  "Next: Check opening a folder that contains .codediff.ini file."
 
@@ -77,15 +79,15 @@ function  TestLocal() {
     Pause  "OK? Close Visual Studio Code"
     ChangeToOldCommit
     if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "a1" ]; then  TestError  "3"  ;fi
-    rm -rf  "$HOME/_tmp/_diff"
+    rm -rf  "${USERPROFILE}/_tmp/_diff"
     rm -f  "_codediff.log"
 }
 
 function  TestGitRepository() {
     echo  ""
     echo  "TestGitRepository =================================="
-    local  workingFolderPath="$HOME/_tmp/_diff/1"
-    rm -rf  "$HOME/_tmp/_diff"
+    local  workingFolderPath="${USERPROFILE}/_tmp/_diff/1"
+    rm -rf  "${USERPROFILE}/_tmp/_diff"
     rm -f  "_codediff.log"
 
     CopyIniFileTemplate  "files/2_repository_codediff.ini"  "${workingFolderPath}"
@@ -97,15 +99,15 @@ function  TestGitRepository() {
     Pause  "OK? Close Visual Studio Code"
     ChangeToOldCommit
     if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "git a1" ]; then  TestError  "3"  ;fi
-    rm -rf  "$HOME/_tmp/_diff"
+    rm -rf  "${USERPROFILE}/_tmp/_diff"
     rm -f  "_codediff.log"
 }
 
 function  TestGitRepositorySubFolder() {
     echo  ""
     echo  "TestGitRepositorySubFolder =================================="
-    local  workingFolderPath="$HOME/_tmp/_diff/1"
-    rm -rf  "$HOME/_tmp/_diff"
+    local  workingFolderPath="${USERPROFILE}/_tmp/_diff/1"
+    rm -rf  "${USERPROFILE}/_tmp/_diff"
     rm -f  "_codediff.log"
 
     CopyIniFileTemplate  "files/3_sub_folder_codediff.ini"  "${workingFolderPath}"
@@ -117,15 +119,15 @@ function  TestGitRepositorySubFolder() {
     Pause  "OK? Close Visual Studio Code"
     ChangeToOldCommit
     if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "git sub 1" ]; then  TestError  "3"  ;fi
-    rm -rf  "$HOME/_tmp/_diff"
+    rm -rf  "${USERPROFILE}/_tmp/_diff"
     rm -f  "_codediff.log"
 }
 
 function  TestOfDelete() {
     echo  ""
     echo  "TestOfDelete =================================="
-    local  workingFolderPath="$HOME/_tmp/_diff/1"
-    rm -rf  "$HOME/_tmp/_diff"
+    local  workingFolderPath="${USERPROFILE}/_tmp/_diff/1"
+    rm -rf  "${USERPROFILE}/_tmp/_diff"
     rm -f  "_codediff.log"
 
     CopyIniFileTemplate  "files/4_delete_codediff.ini"  "${workingFolderPath}"
@@ -139,7 +141,7 @@ function  TestOfDelete() {
     ChangeToOldCommit
     AssertNotExist  "${workingFolderPath}/working/sub1"
     AssertNotExist  "${workingFolderPath}/working/d.txt"
-    rm -rf  "$HOME/_tmp/_diff"
+    rm -rf  "${USERPROFILE}/_tmp/_diff"
     rm -f  "_codediff.log"
 }
 
@@ -147,8 +149,8 @@ function  TestInText() {
     for iCase in {1..2}; do
         echo  ""
         echo  "TestInText ${iCase} =================================="
-        local  workingFolderPath="$HOME/_tmp/_diff/1"
-        rm -rf  "$HOME/_tmp/_diff"
+        local  workingFolderPath="${USERPROFILE}/_tmp/_diff/1"
+        rm -rf  "${USERPROFILE}/_tmp/_diff"
         rm -f  "_codediff.log"
         mkdir -p  "${workingFolderPath}"
 
@@ -159,51 +161,54 @@ function  TestInText() {
         elif [ "${iCase}" == 2 ]; then
             pushd  "files" > /dev/null  ||  Error
             ../../codediff  ${TestOption}  "5_codediff_in_text.yaml"  ||  Error
+            rm -f  "_codediff.log"
             popd > /dev/null  ||  Error
         fi
-        if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "a2" ]; then  TestError  "2"  ;fi
+        test  "$( cat "${workingFolderPath}/working/a.txt" )" == "a2"  ||  TestError  "2"
         AssertReadOnly  "${workingFolderPath}/working/a.txt"
         ChangeToOldCommit
-        if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "a1" ]; then  TestError  "3"  ;fi
-        rm -rf  "$HOME/_tmp/_diff"
+        test  "$( cat "${workingFolderPath}/working/a.txt" )" == "a1"  ||  TestError  "3"
+        rm -rf  "${USERPROFILE}/_tmp/_diff"
         rm -f  "_codediff.log"
     done
 }
 
 function  TestCopyFolder() {
+    echo  ""
+    echo  "TestCopyFolder =================================="
     MakeCopySource  "_work/source"
 
     CopyFolder  "_work/source"  "_work/destination"
     pushd  "_work/destination"  >  /dev/null
-    local  result="$( find . )"
+    local  result="$( find "." | sort )"
     popd  >  /dev/null
 local  answer=".
+./a.txt
+./build
+./build/_do_not_copy
 ./empty
 ./empty/s
 ./sub1
 ./sub1/s
 ./sub1/s/a.txt
-./a.txt
 ./sub2
 ./sub2/s
 ./sub2/s/a.txt
 ./sub2/s/build
-./sub2/s/build/_do_not_copy
-./build
-./build/_do_not_copy"
+./sub2/s/build/_do_not_copy"
     test  "${result}" == "${answer}"  ||  Error
     rm -rf  "_work/destination"
 
     CopyFolder  "_work/source"  "_work/destination"  --exclude build  --exclude sub2/s/build  --exclude empty/s
     pushd  "_work/destination"  >  /dev/null
-    local  result="$( find . )"
+    local  result="$( find "." | sort )"
     popd  >  /dev/null
 local  answer=".
+./a.txt
 ./empty
 ./sub1
 ./sub1/s
 ./sub1/s/a.txt
-./a.txt
 ./sub2
 ./sub2/s
 ./sub2/s/a.txt"
@@ -348,6 +353,21 @@ function  AssertReadOnly() {
 
     if [ "${writable}" == "${True}" ]; then
         Error  "ERROR: Not read only file \"${path}\""
+    fi
+}
+
+function  ModifyGlobalVariables() {
+    if [ "${USERPROFILE}" == "" ]; then  #// for WSL2
+        if [ "${USERNAME}" == "" ]; then  #// If USERNAME was not defined in parent script
+            export USERNAME="$( /mnt/c/WINDOWS/system32/cmd.exe /c 'echo %USERNAME%'  2> /dev/null )"
+            export USERNAME="${USERNAME:0:${#USERNAME}-1}"  #// Cut last CR
+        fi
+        export USERPROFILE="/mnt/c/Users/${USERNAME}"
+    else
+        export USERPROFILE="$( echo "${USERPROFILE}" | sed 's/\\/\//g' )"
+    fi
+    if [ "${PWD:0:7}" == "/mnt/c/" ]; then
+        WslMnt="/mnt"
     fi
 }
 
