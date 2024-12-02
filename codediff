@@ -33,7 +33,7 @@ function  Main() {
     iniFilePath="$( GetWslPathFromWindowsPath "${iniFilePath}" )"
 
     if [ "${comparePathA}" != ""  -a  "${comparePathB}" != "" ]; then
-        MakeIniFileFromParameters  "${comparePathA}"  "${comparePathB}" 
+        MakeIniFileFromParameters  "${comparePathA}"  "${comparePathB}"
     elif [ "${iniFilePath}" != ""  -a  "${comparePathB}" == ""  -a  -f "${iniFilePath}" ]; then
         CopyIniFile  "${iniFilePath}"
     fi
@@ -49,8 +49,12 @@ function  Main() {
     else
         echo  "Setting file: \"${WorkingFolderPath}/.codediff.ini\""
         ParseIniFile  "${WorkingFolderPath}/.codediff.ini"  "${iniFilePath}"
-        CreateWorkingFiles  0  "${WorkingFolderPath}/working_0"
-        CreateWorkingFiles  1  "${WorkingFolderPath}/working_1"
+        if BothIsLocal 0 1; then
+            CopyDiffFiles  0  "${WorkingFolderPath}/working_0"  1  "${WorkingFolderPath}/working_1"
+        else
+            CreateWorkingFiles  0  "${WorkingFolderPath}/working_0"
+            CreateWorkingFiles  1  "${WorkingFolderPath}/working_1"
+        fi
         CreateNewGitWorking  "${WorkingFolderPath}/working_0"  "${WorkingFolderPath}/working_1"
 
         OpenIDE  "${WorkingFolderPath}/working"  "${WorkingFolderPath}/.codediff.ini"
@@ -194,6 +198,73 @@ function  CreateWorkingFiles() {
             popd  > /dev/null
         done
     fi
+}
+
+function  BothIsLocal() {
+    local  indexA="$1"
+    local  indexB="$2"
+    local  localFullPathA="${Setting_LocalFullPath[${indexA}]}"
+    local  localFullPathB="${Setting_LocalFullPath[${indexB}]}"
+
+    if [ "${localFullPathA}" != "" ] && [ "${localFullPathB}" != "" ]; then
+        return  0  #// true
+    else
+        return  1  #// false
+    fi
+}
+
+function  CopyDiffFiles() {
+    local  indexA="$1"
+    local  outputFolderPathA="$2"
+    local  indexB="$3"
+    local  outputFolderPathB="$4"
+    local  folderPathA="${Setting_LocalFullPath[${indexA}]}"
+    local  folderPathB="${Setting_LocalFullPath[${indexB}]}"
+    local  filePath
+
+    local  diffFilePaths="$( GetDiffFilePaths "${folderPathA}"  "${folderPathB}" )"
+    while IFS= read -r filePath; do  #// filePath=( read file in "diffFilePaths" )
+        local  sourceFilePathA="${folderPathA}/${filePath}"
+        local  sourceFilePathB="${folderPathB}/${filePath}"
+        local  destinationFilePathA="${outputFolderPathA}/${filePath}"
+        local  destinationFilePathB="${outputFolderPathB}/${filePath}"
+        if [ -e "${sourceFilePathA}" ]; then
+            mkdir -p  "${destinationFilePathA%/*}"  #// left of last "/"
+
+            cp -ap "${sourceFilePathA}"  "${destinationFilePathA}"
+        fi
+        if [ -e "${sourceFilePathB}" ]; then
+            mkdir -p  "${destinationFilePathB%/*}"  #// left of last "/"
+
+            cp -ap "${sourceFilePathB}"  "${destinationFilePathB}"
+        fi
+    done < <( echo "${diffFilePaths}" )
+}
+
+function  GetDiffFilePaths() {
+    local  folderPathA="$1"
+    local  folderPathB="$2"
+
+    diff -rq  "${folderPathA}"  "${folderPathB}"  |  DiffFilesFilter  "${folderPathA}"  "${folderPathB}"
+}
+
+function  DiffFilesFilter() {
+    #// Input:
+    #//     Files __PathA__ __PathB__ differs
+    #//     Only in __FolderPath__: __FileName__
+    #// Output:
+    #//     __RelativeFileOrFolderPath__
+    #//     __RelativeFileOrFolderPath__
+    local  standardOutput="$( cat )"  #// function stdin
+    local  folderPathA="$1"
+    local  folderPathB="$2"
+
+    local  simpleOutput="$( echo  "${standardOutput}"  |  sed -E  's|^Files (.+) and .+ differ$|\1|' )"
+    local  simpleOutput="$( echo  "${simpleOutput}"    |  sed -E  's|Only in (.+): (.+)|\1/\2|' )"
+    local  simpleOutput="$( echo  "${simpleOutput}"    |  sed -E  "s|^${folderPathA}/||" )"
+    local  simpleOutput="$( echo  "${simpleOutput}"    |  sed -E  "s|^${folderPathB}/||" )"
+
+    echo  "${simpleOutput}"
 }
 
 function  CreateNewGitWorking() {
@@ -403,10 +474,10 @@ function  ParsingIsActive() {
 function  CopyFolder() {
     local  source="$1"
     local  destination="$2"
-
+    local  option="$3"
     local  excludePaths=( )
     while true; do
-        local  option="$3"
+        option="$3"
         if [ "${option}" == "" ]; then
             break
         fi
@@ -420,12 +491,12 @@ function  CopyFolder() {
             Error  "Not supported option: ${ignoreDotGit}"
         fi
     done
-
     source="$( CutLastOf  "${source}"  "/" )"
     destination="$( CutLastOf  "${destination}"  "/" )"
 
     mkdir -p  "${destination}/"
     if [ "${#excludePaths[@]}" == 0 ]; then
+
         ls -a "${source}" | grep -v  -e "^\.$"  -e "^\.\.$" | xargs  -I {} \
             cp -Rap  "${source}/{}"  "${destination}/"
     else

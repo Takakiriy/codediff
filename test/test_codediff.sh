@@ -357,6 +357,12 @@ function  AssertReadOnly() {
 }
 
 function  ModifyGlobalVariables() {
+    if [ !  -e "/mnt/c/" ]; then  #// If Linux or Windows Git bash
+        if [ ! -e "/c/Windows" ]; then  #// if Linux
+            export USERNAME="${USER}"
+        fi
+        export USERPROFILE="${HOME}"
+    fi
     if [ "${USERPROFILE}" == "" ]; then  #// for WSL2
         if [ "${USERNAME}" == "" ]; then  #// If USERNAME was not defined in parent script
             export USERNAME="$( /mnt/c/WINDOWS/system32/cmd.exe /c 'echo %USERNAME%'  2> /dev/null )"
