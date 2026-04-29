@@ -1,6 +1,7 @@
 #!/bin/bash
 ThisScriptParentPath="$( readlink -f "${0%/*}" )"
 ProjectPath="${ThisScriptParentPath%/*}"
+cd  "${ThisScriptParentPath}"
 
 PositionalArgs=()
 while [[ $# -gt 0 ]]; do
@@ -24,7 +25,7 @@ function  Main() {
     TestOfDelete
     TestInText
     TestCopyFolder
-
+    TestSame
     EndOfTest
 }
 
@@ -49,6 +50,7 @@ function  TestParameters() {
         "https://github.com/Takakiriy/codediff#example_2"  ||  Error
     if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "git a2" ]; then  TestError  "2"  ;fi
     AssertReadOnly  "${workingFolderPath}/working/a.txt"
+    test  "$( cat "_codediff.log" )" == "OpenIDE \"${HOME}/_tmp/_diff/1/working\""  ||  Error
     Pause  "OK? Close Visual Studio Code"
     ChangeToOldCommit
     if [ "$( cat "${workingFolderPath}/working/a.txt" )" != "git a1" ]; then  TestError  "3"  ;fi
@@ -247,6 +249,22 @@ local  answer=".
     CopyFolder  "_work/source"  "_work/destination"  --exclude ./sub2  --exclude ./sub2/s/build  --exclude ./empty/s
     test  "${result}" == "${answer}"  ||  Error
     rm -rf  "_work"
+}
+
+function  TestSame() {
+    echo  ""
+    echo  "TestSame =================================="
+    local  workingFolderPath="$HOME/_tmp/_diff/1"
+    rm -rf  "$HOME/_tmp/_diff"
+    rm -f  "_codediff.log"
+    rm -rf  "files/__repository_1"
+    mkdir -p  "${workingFolderPath}"
+    cp -ap  "files/repository_1"  "files/__repository_1"
+
+    ../codediff  ${TestOption}  "files/repository_1"  "files/__repository_1"  ||  Error
+    rm -rf  "$HOME/_tmp/_diff"
+    rm -f  "_codediff.log"
+    rm -rf  "files/__repository_1"
 }
 
 function  MakeCopySource() {
