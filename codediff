@@ -30,9 +30,9 @@ function  Main() {
     local  comparePathB="$2"
     local  workingFolderPath="${WorkingFolderPathDefault}"
 
-    if [ "${comparePathA}" != ""  -a  "${comparePathB}" != "" ]; then
-        MakeIniFileFromParameters  "${comparePathA}"  "${comparePathB}" 
-    elif [ "${iniFilePath}" != ""  -a  "${comparePathB}" == ""  -a  -f "${iniFilePath}" ]; then
+    if [ "${comparePathA}" != "" ] && [ "${comparePathB}" != "" ]; then
+        MakeIniFileFromParameters  "${comparePathA}"  "${comparePathB}"
+    elif [ "${iniFilePath}" != "" ] && [ "${comparePathB}" == "" ] && [ -f "${iniFilePath}" ]; then
         CopyIniFile  "${iniFilePath}"  "${workingFolderPath}"
     fi
 
@@ -43,6 +43,10 @@ function  Main() {
         ParseIniFile  "${workingFolderPath}/.codediff.ini"  "${iniFilePath}"
         CreateWorkingFiles  0  "${workingFolderPath}/working_0"
         CreateWorkingFiles  1  "${workingFolderPath}/working_1"
+        if diff  "${workingFolderPath}/working_0"  "${workingFolderPath}/working_1" > /dev/null; then
+            echo  "Same"
+            return
+        fi
         CreateNewGitWorking  "${workingFolderPath}/working_0"  "${workingFolderPath}/working_1"
         OpenIDE  "${workingFolderPath}/working"  "${workingFolderPath}/.codediff.ini"
     fi
@@ -479,7 +483,7 @@ function  GetFullPath() {
         basePath=${basePath%/*}
     fi
 
-    if [ "${relativePath:0:1}" != "/"  -a  "${relativePath:0:1}" != '$' ]; then
+    if [ "${relativePath:0:1}" != "/" ] && [ "${relativePath:0:1}" != '$' ]; then
         local  fullPath="$( readlink -f  "${basePath}/${relativePath}" )"
     else
         local  fullPath="${relativePath}"
@@ -622,12 +626,80 @@ function  AssertNotExist() {
     fi
 }
 
-# ExitIfMatched
-#     Check exit code and return code in $( )
-# Example:
-#     local  out="$(x="$( command )" && echo "$x" || echo "(ERROR:$?)" )"
-#     ExitIfMatched  "${out}"  '^\(ERROR:([0-9]*)\)$'
+#section: Debug
+
+function  pp() {
+    # pp
+    #     Debug print
+    # Example:
+    #     pp "$config"
+    #     pp "$config" config
+    #     pp "$array" array  ${#array[@]}  "${array[@]}"
+    #     pp "123"
+    #     $( pp "$config" >&2 )
+    local  value="${1-""}"  #// "${1-""}" means that "$1" default is "".
+    local  variableName="${2-""}"  #// "${1-""}" means that "$1" default is "".
+    if [ "${variableName}" != "" ]; then  variableName=" ${variableName} "  ;fi  #// Add spaces
+    local  oldIFS="$IFS"
+    IFS=$'\n'
+    local  valueLines=( ${value} )
+    IFS="$oldIFS"
+
+    local  type=""
+    if [ "${variableName}" != "" ]; then
+        if [[ "$(declare -p ${variableName} 2>&1 )" =~ "declare -a" ]]; then
+            local  type="array"
+        fi
+    fi
+    if [ "${type}" == "" ]; then
+        if [ "${#valueLines[@]}" == 1  -o  "${#valueLines[@]}" == 0 ]; then
+            local  type="oneLine"
+        else
+            local  type="multiLine"
+        fi
+    fi
+
+    if [[ "${type}" == "oneLine" ]]; then
+        echo  "@@@${variableName}= \"${value}\" -------- $( GetCodePosition 1 ) ---------------------------"  >&2
+    elif [[ "${type}" == "multiLine" ]]; then
+        echo  "@@@${variableName} -------- $( GetCodePosition 1 ) ---------------------------"  >&2
+        echo  "\"${value}\"" >&2
+    elif [[ "${type}" == "array" ]]; then
+        echo  "@@@${variableName} -------- $( GetCodePosition 1 ) ---------------------------"  >&2
+        local  count="${3-""}"  #// "${1-""}" means that "$1" default is "".
+        if [ "${count}" == "" ]; then
+            echo  "[0]: \"$4\""  >&2
+            echo  "[1]: ERROR: pp parameter is too few"  >&2
+        elif [ "${count}" == "0" ]; then
+            echo  "[]"  >&2
+        else
+            local  i=""
+            for (( i = 0; i < ${count}; i += 1 ));do
+                echo  "[${i}]: \"$4\""  >&2
+                shift
+            done
+        fi
+    else
+        echo  "@@@${variableName}? -------- $( GetCodePosition 1 ) ---------------------------"  >&2
+    fi
+}
+
+function  GetCodePosition() {
+    local  parent="${1-"0"}"  #// "${1-"0"}" means that "$1" default is "0".
+    local  frame=( $( caller "${parent}" ) )
+    local  fileName="${frame[2]}"
+    local  lineNum="${frame[0]}"
+    echo  "${fileName}:${lineNum}"
+}
+
+#section: Error
+
 function  ExitIfMatched() {
+    # ExitIfMatched
+    #     Check function return code or function exit code in $( )
+    # Example:
+    #     local  out="$(x="$( command )" && echo "$x" || echo "(ERROR:$?)" )"
+    #     ExitIfMatched  "${out}"  '^\(ERROR:([0-9]*)\)$'
     local  output="$1"
     local  regularExpression="$2"
 
@@ -638,14 +710,24 @@ function  ExitIfMatched() {
 }
 
 function  Error() {
-    local  errorMessage="$1"
-    local  exitCode="$2"
+    local  errorMessage="${1-""}"  #// "${1-""}" means that "$1" default is "".
+    local  exitCode="${2-""}"      #// "${1-""}" means that "$1" default is "".
     if [ "${errorMessage}" == "" ]; then
         errorMessage="ERROR"
     fi
     if [ "${exitCode}" == "" ]; then  exitCode=2  ;fi
+    if [ "${InChildProcess}" == "yes" ]; then
+        local  seeChildProcessMessage="(See above error message. The following message is usually no effective.) "
+    else
+        local  seeChildProcessMessage=""
+    fi
 
-    echo  "${errorMessage}" >&2
+    # PrintCallStack
+
+    echo -e  "${seeChildProcessMessage}${errorMessage}"  >&2
+    if [ "${MSYSTEM}" == "MINGW64" ]; then
+        echo  "[Advice] Git bash is flaky on Windows. Install WSL2 and input the command: wsl __CommadAndParameters__"
+    fi
     exit  "${exitCode}"
 }
 
