@@ -16,7 +16,9 @@ fi
 PositionalArgs=()
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --test)  Options_Test="yes"; shift;;  #// Without value
+        --test)  Options_Test="yes"; shift;;
+        --merge) Options_Merge="$2"; shift; shift;;
+        --check) Options_Check="yes"; shift;;
         -*) echo "Unknown option $1"; exit 1;;
         *) PositionalArgs+=("$1"); shift;;
     esac
@@ -24,17 +26,41 @@ done
 set -- "${PositionalArgs[@]}"  #// set $1, $2, ...
 unset PositionalArgs
 
+#section: Main
+    # : Process
+    # : File
+    # : String
+    # : IniFile
+    # : Git
+    # : Others
+    # : Debug
+    # : Error
 function  Main() {
     local  iniFilePath="$1"
     local  comparePathA="$1"  #// $1 is shared
     local  comparePathB="$2"
+    local  sourcePath="$1"
     local  workingFolderPath="${WorkingFolderPathDefault}"
 
     if [ "${comparePathA}" != "" ] && [ "${comparePathB}" != "" ]; then
         MakeIniFileFromParameters  "${comparePathA}"  "${comparePathB}"
-    elif [ "${iniFilePath}" != "" ] && [ "${comparePathB}" == "" ] && [ -f "${iniFilePath}" ]; then
-        CopyIniFile  "${iniFilePath}"  "${workingFolderPath}"
+        Diff  "${workingFolderPath}"
+
+    elif [ "${Options_Merge}" == "" ]; then  #// ini file used diff
+        if [ "${iniFilePath}" != "" ] && [ -f "${iniFilePath}" ]; then
+            CopyIniFile  "${iniFilePath}"  "${workingFolderPath}"
+        fi
+        Diff  "${workingFolderPath}"
+
+    elif [ "${sourcePath}" != "" ] && [ "${Options_Merge}" != "" ]; then
+        Merge  "${sourcePath}"  "${workingFolderPath}"
+    else
+        Error  "ERROR: Unknown parameters pattern."
     fi
+}
+
+function  Diff() {
+    local  workingFolderPath="$1"
 
     if [ ! -e "${workingFolderPath}/.codediff.ini" ]; then
         MakeWorkingFolderIfNot  "${workingFolderPath}"
@@ -49,6 +75,76 @@ function  Main() {
         fi
         CreateNewGitWorking  "${workingFolderPath}/working_0"  "${workingFolderPath}/working_1"
         OpenIDE  "${workingFolderPath}/working"  "${workingFolderPath}/.codediff.ini"
+    fi
+}
+
+function  Merge() {
+    local  sourcePath="$1"
+    local  workingFolderPath="$2"
+    local  branches="$( GetStrictCSV "${Options_Merge}" )"
+    local  branch0="${branches%%,*}"  #// left of ","
+    if [ "${branch0}" == "${branches}" ]; then
+        local  mergingBranchesCSV=""
+    else
+        local  mergingBranchesCSV="${branches#*,*}"  #// right of ","
+    fi
+    local  mergingBranches=( )  &&  IFS=',' read -ra  mergingBranches  <<< "${mergingBranchesCSV}"
+    local  errorExists="false"
+    if [ "${Options_Check}" != "" ]; then
+        local  runWithEcho=""
+        local  redirect=/dev/null
+    else
+        local  runWithEcho=RunWithEcho
+        local  redirect=/dev/stdout
+    fi
+    if IsURL "${sourcePath}"; then
+        Setting_RepositoryURL+=( "${sourcePath}" )
+    else
+        local  localFullPath="$( readlink -f "${sourcePath}" )"
+        AssertExist  "${localFullPath}"
+        Setting_LocalGitWorkingFullPath+=( "${localFullPath}" )
+    fi
+    Setting_BranchOrTag+=("${branch0}")
+
+    CreateWorkingFiles  0  "${workingFolderPath}/working"
+    cd  "${workingFolderPath}/working"
+    $runWithEcho  git config --local  rerere.enabled  false  > $redirect
+    $runWithEcho  git config --local  rerere.autoupdate  false  > $redirect
+    local  branch=""
+    echo  "base branch: ${branch0}"
+    for branch in "${mergingBranches[@]}"; do
+        echo  ""  > $redirect
+        echo  "incoming branch: ${branch}"
+        if IsURL "${sourcePath}"; then
+            mergingBranch="origin/${branch}"
+        else
+            mergingBranch="${branch}"
+        fi
+        local  mergeLogPath="${workingFolderPath}/_merge_${branch}.log"
+
+        $runWithEcho \
+            git merge  --no-ff --no-edit  "${mergingBranch}"  2>&1  |  \
+                tee  "${mergeLogPath}"  > $redirect
+        local  exitCodes="${PIPESTATUS[@]}"
+        local  errorLogGuide="Log: \"${mergeLogPath}\", Working: \"${workingFolderPath}/working\""
+
+        if grep "CONFLICT"  "${mergeLogPath}" > /dev/null; then
+            echo -e  "${Red}CONFLICT${DefaultColor}: ${errorLogGuide}"  >&2
+            errorExists="true"
+        elif [ "${exitCodes}" != "0 0" ]; then
+            echo -e  "${Red}ERROR${DefaultColor}: ${errorLogGuide}"  >&2
+            errorExists="true"
+        fi
+    done
+
+    if [ "${Options_Check}" != "" ]; then
+        if [ "${errorExists}" == "true" ]; then
+            return  1
+        else
+            echo  "No conflict"
+        fi
+    else
+        OpenIDE  "${workingFolderPath}/working"
     fi
 }
 
@@ -141,11 +237,20 @@ function  CreateWorkingFiles() {
     local  outputFolderPath="$2"
     local  settingName="${Setting_Name[${index}]}"
     local  localFullPath="${Setting_LocalFullPath[${index}]}"
+    local  localGitWorkingFullPath="${Setting_LocalGitWorkingFullPath[${index}]}"
     local  repositoryURL="${Setting_RepositoryURL[${index}]}"
     local  branchOrTag="${Setting_BranchOrTag[${index}]}"
     local  baseRelativePath="${Setting_BaseRelativePath[${index}]}"
+    if [ "${Options_Check}" != "" ]; then
+        local  runWithEcho=""
+        local  redirect=/dev/null
+    else
+        local  runWithEcho=RunWithEcho
+        local  redirect=/dev/stdout
+    fi
 
-    rm -rf  "${outputFolderPath}"
+    rm -rf  "${outputFolderPath}"  > $redirect
+
     if [ "${localFullPath}" != "" ]; then
 
         local  excludeOptions="--exclude .git"
@@ -154,23 +259,33 @@ function  CreateWorkingFiles() {
         done
 
         CopyFolder  "${localFullPath}"  "${outputFolderPath}"  ${excludeOptions}
-    else
+
+    elif [ "${localGitWorkingFullPath}" != "" ]; then
+        AssertExist  "${localGitWorkingFullPath}/.git"
+
+        CopyFolder  "${localGitWorkingFullPath}/.git"  "${outputFolderPath}/.git"
+        pushd  "${outputFolderPath}"  > /dev/null  ||  Error
+        git checkout "."  > /dev/null 2>&1  ||  Error
+        git checkout  "${branchOrTag}"  > /dev/null 2>&1  ||  Error
+        popd  > /dev/null
+
+    else  #// ${repositoryURL} != ""
         local  options=""
         if [ "${branchOrTag}" != "" ]; then
             options="${options}  -b ${branchOrTag}"
         fi
         if [ "${baseRelativePath}" == "." ]; then
 
-            git clone  "${repositoryURL}" ${options}  "${outputFolderPath}"  ||  Error
-            rm -rf  "${outputFolderPath}/.git"
+            git clone  "${repositoryURL}" ${options}  "${outputFolderPath}"  > $redirect  ||  Error
+            rm -rf  "${outputFolderPath}/.git"  > $redirect
         elif [ "${baseRelativePath:0:2}" == ".." ]; then
             Error  "ERROR: BaseRelativePath cannot be set a parent folder."
         else
             git clone  --filter=blob:none --sparse  "${repositoryURL}" ${options} \
-                "${WorkingFolderPathDefault}/workingOfWorking"  ||  Error
+                "${WorkingFolderPathDefault}/workingOfWorking"  > $redirect  ||  Error
             pushd  "${WorkingFolderPathDefault}/workingOfWorking"  > /dev/null  ||  Error
 
-            git sparse-checkout set "${baseRelativePath}"
+            git sparse-checkout set "${baseRelativePath}"  > $redirect
             popd  > /dev/null
             rm -rf  "${outputFolderPath}"
 
@@ -387,6 +502,51 @@ function  ParsingIsActive() {
     fi
 }
 
+#section: Process
+
+function  RunWithEcho() {
+    local  optionsText=""
+    if [ "${1:0:13}" == "--output-sed=" ]; then
+        local  sedParameters="${1:13}"  #// Use \s instead of space
+        optionsText="${optionsText}--output-sed=____ "
+        shift
+    else
+        sedParameters=""
+    fi
+    if [ "${optionsText}" != "" ]; then
+        optionsText="$ ${optionsText}"
+    fi
+
+    echo  "$ cd  \"${PWD}\""
+    if [ "${sedParameters}" == "" ]; then
+        echo  "${optionsText}$ $( GetArgumentsString "$@" )"  >&2
+    else
+        echo  "${optionsText}$ $( GetArgumentsString "$@" )"  |  sed -E "${sedParameters}"  >&2
+    fi
+
+    "$@"
+}
+
+function  GetArgumentsString() {
+    local  arguments=""
+
+    for argument in "$@"; do
+        if [ "${argument:0:1}" == "-" ]; then
+            arguments="${arguments} ${argument}"
+        elif [ "${argument}" == ""  -o  "${argument}" == "&&"  -o  "${argument}" == "||" ]; then
+            arguments="${arguments} \"${argument}\""
+        elif [ "$( echo "${argument}" | sed -E 's- |\.|/--' )" != "${argument}" ]; then  #// has space, period or slash
+            arguments="${arguments} \"${argument}\""
+        else
+            arguments="${arguments} ${argument}"
+        fi
+    done
+
+    echo  "${arguments:1}"
+}
+
+#section: File
+
 function  CopyFolder() {
     local  source="$1"
     local  destination="$2"
@@ -501,6 +661,41 @@ function  GetFullPath() {
     echo  "${fullPath}"
 }
 
+function  IsURL() {
+    echo  "$1"  |  grep -E "^[a-z]+://"  > /dev/null
+}
+
+function  AssertExist() {
+    local  path="$1"
+    local  leftOfWildcard="${path%\**}"
+    if [ "${leftOfWildcard}" == "${path}" ]; then  #// No wildcard
+
+        if [ ! -e "${path}" ]; then
+            Error  "ERROR: Not found \"${path}\""
+        fi
+    else
+        local  rightOfWildcard="${path##*\*}"
+        if [ ! -e "${leftOfWildcard}"*"${rightOfWildcard}" ]; then
+            Error  "ERROR: Not found \"${path}\""
+        fi
+    fi
+}
+
+function  AssertNotExist() {
+    local  path="$1"
+
+    if [ -e "${path}" ]; then
+        Error  "ERROR: Found \"${path}\""
+    fi
+}
+
+#section: String
+
+function  GetStrictCSV() {
+    #// This version does not support comma-containing values
+    echo "$1" | sed 's/ *, */,/g'
+}
+
 function  CutLastOf() {
     local  wholeString="$1"
     local  lastExpected="$2"
@@ -515,6 +710,8 @@ function  CutLastOf() {
 function  CutDoubleQuotation() {
     echo  "$1"  |  sed -E 's/^"|"$//g'
 }
+
+#section: IniFile
 
 function  ParseIniFileLineType() {
     local  line="$1"
@@ -552,6 +749,8 @@ function  ParseIniFileParameterValue() {
     fi
 }
 
+#section: Git
+
 function  gitInitOption() {
     if [ "$( LessThanVersion "$(git --version)" "2.31.1" )" == "${True}" ]; then
         echo  ""
@@ -560,9 +759,11 @@ function  gitInitOption() {
     fi
 }
 
-# LessThanVersion
-#     if [ "$( LessThanVersion "$(git --version)" "2.31.1")" == "${True}" ]; then
+#section: Others
+
 function  LessThanVersion() {
+    # LessThanVersion
+    #     if [ "$( LessThanVersion "$(git --version)" "2.31.1")" == "${True}" ]; then
     local  textContainsVersionA="$1"
     local  textContainsVersionB="$2"
     local  isGoodFormat="${True}"
@@ -591,39 +792,15 @@ function  LessThanVersion() {
     echo "${False}"
 }
 
-# Evaluate
-#     Expand variables
-# Example:
-#     var1='value  1'
-#     var2='${var1}  2'
-#     evaluated="$( Evaluate "${var2}" )"  #// value  1  2
 function  Evaluate() {
+    # Evaluate
+    #     Expand variables
+    # Example:
+    #     var1='value  1'
+    #     var2='${var1}  2'
+    #     evaluated="$( Evaluate "${var2}" )"  #// value  1  2
     local  expression="$1"
     eval echo "$( eval echo '\""${expression}"\"' )"
-}
-
-function  AssertExist() {
-    local  path="$1"
-    local  leftOfWildcard="${path%\**}"
-    if [ "${leftOfWildcard}" == "${path}" ]; then  #// No wildcard
-
-        if [ ! -e "${path}" ]; then
-            Error  "ERROR: Not found \"${path}\""
-        fi
-    else
-        local  rightOfWildcard="${path##*\*}"
-        if [ ! -e "${leftOfWildcard}"*"${rightOfWildcard}" ]; then
-            Error  "ERROR: Not found \"${path}\""
-        fi
-    fi
-}
-
-function  AssertNotExist() {
-    local  path="$1"
-
-    if [ -e "${path}" ]; then
-        Error  "ERROR: Found \"${path}\""
-    fi
 }
 
 #section: Debug
@@ -692,6 +869,19 @@ function  GetCodePosition() {
     echo  "${fileName}:${lineNum}"
 }
 
+function  PrintCallStack() {
+    echo  "Call stack:"  >&2
+    local  index=0
+    local  frame
+    while frame=( $( caller "${index}" ) ); do
+        local  functionName="${frame[1]}"
+        local  fileName="${frame[2]}"
+        local  lineNum="${frame[0]}"
+        echo  "    ${functionName} (${fileName}:${lineNum})"  >&2
+        (( index += 1 ))  ||  true
+    done
+}
+
 #section: Error
 
 function  ExitIfMatched() {
@@ -722,7 +912,7 @@ function  Error() {
         local  seeChildProcessMessage=""
     fi
 
-    # PrintCallStack
+    PrintCallStack
 
     echo -e  "${seeChildProcessMessage}${errorMessage}"  >&2
     if [ "${MSYSTEM}" == "MINGW64" ]; then
@@ -733,6 +923,8 @@ function  Error() {
 
 True=0
 False=1
+DefaultColor="\e[0m"
+Red="\e[91m"
 GitInitOption=$(gitInitOption)
 Setting_Name=( )
 Setting_LocalFullPath=( )

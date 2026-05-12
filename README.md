@@ -118,6 +118,5 @@ the depth of the line following the tag.
 
 ## Test
 
-    cd  test
-    ./test_codediff.sh
-    ./test_codediff.sh --manual-test
+    test/test_codediff.sh
+    test/test_codediff.sh --manual-test

@@ -23,6 +23,7 @@ function  Main() {
     TestInText
     TestCopyFolder
     TestSame
+    TestConflictCheck
     EndOfTest
 }
 
@@ -166,39 +167,43 @@ function  TestInText() {
 }
 
 function  TestCopyFolder() {
+    echo  ""
+    echo  "TestCopyFolder =================================="
     MakeCopySource  "_work/source"
 
     CopyFolder  "_work/source"  "_work/destination"
     pushd  "_work/destination"  >  /dev/null
-    local  result="$( find . )"
+    local  result="$( find . | sort )"
     popd  >  /dev/null
-local  answer=".
+local  answer=\
+".
+./a.txt
+./build
+./build/_do_not_copy
 ./empty
 ./empty/s
 ./sub1
 ./sub1/s
 ./sub1/s/a.txt
-./a.txt
 ./sub2
 ./sub2/s
 ./sub2/s/a.txt
 ./sub2/s/build
-./sub2/s/build/_do_not_copy
-./build
-./build/_do_not_copy"
+./sub2/s/build/_do_not_copy"
     test  "${result}" == "${answer}"  ||  Error
     rm -rf  "_work/destination"
 
     CopyFolder  "_work/source"  "_work/destination"  --exclude build  --exclude sub2/s/build  --exclude empty/s
     pushd  "_work/destination"  >  /dev/null
-    local  result="$( find . )"
+    local  result="$( find . | sort )"
     popd  >  /dev/null
-local  answer=".
+local  answer=\
+".
+./a.txt
 ./empty
 ./sub1
 ./sub1/s
 ./sub1/s/a.txt
-./a.txt
 ./sub2
 ./sub2/s
 ./sub2/s/a.txt"
@@ -208,6 +213,86 @@ local  answer=".
     CopyFolder  "_work/source"  "_work/destination"  --exclude ./sub2  --exclude ./sub2/s/build  --exclude ./empty/s
     test  "${result}" == "${answer}"  ||  Error
     rm -rf  "_work"
+}
+
+function  TestConflictCheck() {
+    echo  ""
+    echo  "TestConflictCheck =================================="
+    local  lf=$'\n'
+
+    #// Conflict in repository
+    ../codediff  ${TestOption}  "https://github.com/Takakiriy/codediff"  --merge "example_1, example_2"  --check
+    local  exitCode=$?
+    test  ${exitCode} == 1  ||  Error
+
+    #// Not conflict in repository
+    ../codediff  ${TestOption}  "https://github.com/Takakiriy/codediff"  --merge "example_1, example_1"  --check
+    local  exitCode=$?
+    test  ${exitCode} == 0  ||  Error
+
+    #// Conflict in local
+    GitInitForTest  "./_work"
+    GitAddCommitForTest  "./_work"  "main"  "main"       "Make commit base"  "aaa${lf}bbb${lf}ccc${lf}ddd${lf}eee"
+    GitAddCommitForTest  "./_work"  "main"  "feature_1"  "feature-1 commit"  "aaa${lf}BBBBB${lf}ccc${lf}ddd${lf}eee"
+    GitAddCommitForTest  "./_work"  "main"  "feature_2"  "feature-2 commit"  "aaa${lf}B--BB${lf}ccc${lf}ddd${lf}eee"
+
+    ../codediff  ${TestOption}  "./_work"  --merge "feature_1, feature_2"  --check  &&  Error
+    ../codediff  ${TestOption}  "./_work"  --merge "feature_1, feature_1"  --check  ||  Error
+    ../codediff  ${TestOption}  "./_work"  --merge "feature_1"             --check  ||  Error
+    ../codediff  ${TestOption}  "./_work"  --merge "main, feature_1, feature_2"  --check  &&  Error
+    ../codediff  ${TestOption}  "./_work"  --merge "main, feature_2"             --check  ||  Error
+
+    rm -rf  "./_work"
+}
+
+function  GitInitForTest() {
+    local  gitWorkingPath="$1"
+    rm -rf    "${gitWorkingPath}"
+    mkdir -p  "${gitWorkingPath}"
+    pushd  "${gitWorkingPath}"  > /dev/null
+
+    echo  "$ git init"
+    git init -b "main"  ||  Error
+    git config --local user.email "yourname@example.com"  ||  Error
+    git config --local user.name  "Your Name"  ||  Error
+    echo "" > "README"
+    git add "."  ||  Error
+    git commit -m "first commit"  ||  Error
+    popd  > /dev/null
+}
+
+function  GitAddCommitForTest() {
+    local  gitWorkingPath="$1"
+    local  baseBranch="$2"
+    local  commitBranch="$3"
+    local  commitMessage="$4"
+    local  text="$5"
+    pushd  "${gitWorkingPath}"  > /dev/null
+
+    AssertExist  "./.git"
+
+    echo  "$ git checkout  \"${commitBranch}\""
+    if [ "${baseBranch}" != "" ] && [ "${baseBranch}" != "${commitBranch}" ]; then
+        git checkout  "${baseBranch}"  ||  Error
+        git checkout -b "${commitBranch}"  ||  Error
+    else
+        git checkout  "${commitBranch}"  ||  Error
+    fi
+
+    echo  "$ echo .... > \"a.txt\""
+    echo  "${text}"  >  "a.txt"
+    echo  "$ git add \".\""
+    git add "."  ||  Error
+    echo  "$ git commit -m \"${commitMessage}\""
+    git commit -m "${commitMessage}"  ||  Error
+    popd  > /dev/null
+}
+
+function  AssertExist() {
+    local  path="$1"
+    if [ ! -e "${path}" ]; then
+        Error  "ERROR: Not found \"${path}\""
+    fi
 }
 
 function  TestSame() {
@@ -370,6 +455,8 @@ function  Error() {
     fi
     if [ "${exitCode}" == "" ]; then  exitCode=2  ;fi
 
+    PrintCallStack
+
     echo  "${errorMessage}" >&2
     exit  "${exitCode}"
 }
@@ -394,6 +481,83 @@ function  EndOfTest() {
     if [ "${ErrorCount}" == "0" ]; then
         echo  "Pass."
     fi
+}
+
+function  pp() {
+    # pp
+    #     Debug print
+    # Example:
+    #     pp "$config"
+    #     pp "$config" config
+    #     pp "$array" array  ${#array[@]}  "${array[@]}"
+    #     pp "123"
+    #     $( pp "$config" >&2 )
+    local  value="${1-""}"  #// "${1-""}" means that "$1" default is "".
+    local  variableName="${2-""}"  #// "${1-""}" means that "$1" default is "".
+    if [ "${variableName}" != "" ]; then  variableName=" ${variableName} "  ;fi  #// Add spaces
+    local  oldIFS="$IFS"
+    IFS=$'\n'
+    local  valueLines=( ${value} )
+    IFS="$oldIFS"
+
+    local  type=""
+    if [ "${variableName}" != "" ]; then
+        if [[ "$(declare -p ${variableName} 2>&1 )" =~ "declare -a" ]]; then
+            local  type="array"
+        fi
+    fi
+    if [ "${type}" == "" ]; then
+        if [ "${#valueLines[@]}" == 1  -o  "${#valueLines[@]}" == 0 ]; then
+            local  type="oneLine"
+        else
+            local  type="multiLine"
+        fi
+    fi
+
+    if [[ "${type}" == "oneLine" ]]; then
+        echo  "@@@${variableName}= \"${value}\" -------- $( GetCodePosition 1 ) ---------------------------"  >&2
+    elif [[ "${type}" == "multiLine" ]]; then
+        echo  "@@@${variableName} -------- $( GetCodePosition 1 ) ---------------------------"  >&2
+        echo  "\"${value}\"" >&2
+    elif [[ "${type}" == "array" ]]; then
+        echo  "@@@${variableName} -------- $( GetCodePosition 1 ) ---------------------------"  >&2
+        local  count="${3-""}"  #// "${1-""}" means that "$1" default is "".
+        if [ "${count}" == "" ]; then
+            echo  "[0]: \"$4\""  >&2
+            echo  "[1]: ERROR: pp parameter is too few"  >&2
+        elif [ "${count}" == "0" ]; then
+            echo  "[]"  >&2
+        else
+            local  i=""
+            for (( i = 0; i < ${count}; i += 1 ));do
+                echo  "[${i}]: \"$4\""  >&2
+                shift
+            done
+        fi
+    else
+        echo  "@@@${variableName}? -------- $( GetCodePosition 1 ) ---------------------------"  >&2
+    fi
+}
+
+function  GetCodePosition() {
+    local  parent="${1-"0"}"  #// "${1-"0"}" means that "$1" default is "0".
+    local  frame=( $( caller "${parent}" ) )
+    local  fileName="${frame[2]}"
+    local  lineNum="${frame[0]}"
+    echo  "${fileName}:${lineNum}"
+}
+
+function  PrintCallStack() {
+    echo  "Call stack:"  >&2
+    local  index=0
+    local  frame
+    while frame=( $( caller "${index}" ) ); do
+        local  functionName="${frame[1]}"
+        local  fileName="${frame[2]}"
+        local  lineNum="${frame[0]}"
+        echo  "    ${functionName} (${fileName}:${lineNum})"  >&2
+        (( index += 1 ))  ||  true
+    done
 }
 
 True=0

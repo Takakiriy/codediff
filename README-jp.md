@@ -81,7 +81,7 @@ Git リポジトリのURLや、差分の設定ファイルを指定すること�
     ExcludeRelativePath = ____
     ExcludeRelativePath = ____
         ...
-    
+
 Git リポジトリ からダウンロードする場合：
 
     [__CommitMessage__]
@@ -112,6 +112,5 @@ Git リポジトリ からダウンロードする場合：
 
 ## テスト
 
-    cd  test
-    ./test_codediff.sh
-    ./test_codediff.sh --manual-test
+    test/test_codediff.sh
+    test/test_codediff.sh --manual-test
