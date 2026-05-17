@@ -9,7 +9,7 @@ Git リポジトリのURLや、差分の設定ファイルを指定すること�
 ![スクショ](./codediff.png)
 
 
-## コマンドのサンプル
+## 比較コマンド
 
 ### codediff コマンドに比較対象を指定する場合
 
@@ -77,7 +77,8 @@ Windows Git bash または PowerShell でフルパスを指定する場合は、
 - Visual Studio Code が開きます
 - Source Control ビューに切り替えて、差分を確認してください
 
-## 設定ファイル
+
+## 比較用設定ファイル
 
 サンプル：
 
@@ -101,7 +102,7 @@ Windows Git bash または PowerShell でフルパスを指定する場合は、
     ExcludeRelativePath = ____
     ExcludeRelativePath = ____
         ...
-    
+
 Git リポジトリ からダウンロードする場合：
 
     [__CommitMessage__]
@@ -116,13 +117,28 @@ Git リポジトリ からダウンロードする場合：
 
 `ExcludeRelativePath` は全てのセクションに書く必要はありません。
 
+
+## コンフリクト チェック
+
+ブランチ間でコンフリクトしていないかをチェックします。
+
+    codediff  path/to/git/working/folder  --merge "branch_1, branch_2"  --check
+
+または
+
+    codediff  https://github.com/owner/URL/  --merge "branch_1, branch_2, branch_3"
+
+- --check オプションをつける場合、コンフリクトしているかいないかの表示だけをします
+- --check オプションをつけない場合、マージの途中でコンフリクトした状態を Visual Studio Code で開きます
+- コンフリクトが発生しなければ、終了コードは 0 になります
+
+
 ## テスト
 
 ### コマンド
 
-    cd  test
-    ./test_codediff.sh
-    ./test_codediff.sh --manual-test
+    test/test_codediff.sh
+    test/test_codediff.sh --manual-test
 
 ### Windows git bash の場合
 
@@ -131,3 +147,8 @@ WSL2 をインストールして実行すると安定します。
     cd  test
     wsl ./test_codediff.sh
     wsl ./test_codediff.sh --manual-test
+
+### 翻訳の同期が取れたら
+
+translated Git タグを更新します。
+

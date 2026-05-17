@@ -128,9 +128,8 @@ It is not necessary to write `ExcludeRelativePath` in all sections.
 
 ### Commands
 
-    cd  test
-    ./test_codediff.sh
-    ./test_codediff.sh --manual-test
+    test/test_codediff.sh
+    test/test_codediff.sh --manual-test
 
 ### Case of Windows git bash
 

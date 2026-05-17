@@ -17,7 +17,9 @@ WorkingFolderPath="${WorkingFolderPathDefault}"
 PositionalArgs=()
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --test)  Options_Test="yes"; shift;;  #// Without value
+        --test)  Options_Test="yes"; shift;;
+        --merge) Options_Merge="$2"; shift; shift;;
+        --check) Options_Check="yes"; shift;;
         -*) echo "Unknown option $1"; exit 1;;
         *) PositionalArgs+=("$1"); shift;;
     esac
@@ -25,19 +27,41 @@ done
 set -- "${PositionalArgs[@]}"  #// set $1, $2, ...
 unset PositionalArgs
 
+#section: Main
+    # : Process
+    # : File
+    # : String
+    # : IniFile
+    # : Git
+    # : Others
+    # : Debug
+    # : Error
 function  Main() {
     local  iniFilePath="$1"
     local  comparePathA="$1"  #// $1 is shared
     local  comparePathB="$2"
+    local  sourcePath="$1"
     ModifyGlobalVariables
     iniFilePath="$( GetWslPathFromWindowsPath "${iniFilePath}" )"
 
     if [ "${comparePathA}" != "" ] && [ "${comparePathB}" != "" ]; then
         MakeIniFileFromParameters  "${comparePathA}"  "${comparePathB}"
-    elif [ "${iniFilePath}" != "" ] && [ "${comparePathB}" == "" ] && [ -f "${iniFilePath}" ]; then
-        CopyIniFile  "${iniFilePath}"  "${workingFolderPath}"
-    fi
+        Diff  "${WorkingFolderPath}"
 
+    elif [ "${Options_Merge}" == "" ]; then  #// ini file used diff
+        if [ "${iniFilePath}" != "" ] && [ -f "${iniFilePath}" ]; then
+            CopyIniFile  "${iniFilePath}"  "${WorkingFolderPath}"
+        fi
+        Diff  "${WorkingFolderPath}"
+
+    elif [ "${sourcePath}" != "" ] && [ "${Options_Merge}" != "" ]; then
+        Merge  "${sourcePath}"  "${WorkingFolderPath}"
+    else
+        Error  "ERROR: Unknown parameters pattern."
+    fi
+}
+
+function  Diff() {
     if [ ! -e "${WorkingFolderPath}/.codediff.ini" ]; then
         rm -rf  "${WorkingFolderPath}"
 
@@ -49,13 +73,13 @@ function  Main() {
     else
         echo  "Setting file: \"${WorkingFolderPath}/.codediff.ini\""
         ParseIniFile  "${WorkingFolderPath}/.codediff.ini"  "${iniFilePath}"
-        if BothIsLocal 0 1; then
+        if false; then  #// if BothIsLocal 0 1; then
             CopyDiffFiles  0  "${WorkingFolderPath}/working_0"  1  "${WorkingFolderPath}/working_1"
         else
             CreateWorkingFiles  0  "${WorkingFolderPath}/working_0"
             CreateWorkingFiles  1  "${WorkingFolderPath}/working_1"
         fi
-        if diff  "${workingFolderPath}/working_0"  "${workingFolderPath}/working_1" > /dev/null; then
+        if diff  "${WorkingFolderPath}/working_0"  "${WorkingFolderPath}/working_1" > /dev/null; then
             echo  "Same"
             return
         fi
@@ -64,6 +88,75 @@ function  Main() {
         OpenIDE  "${WorkingFolderPath}/working"  "${WorkingFolderPath}/.codediff.ini"
         echo  ""
         echo  "You can check different by Git diff in opened VSCode source control."
+    fi
+}
+
+function  Merge() {
+    local  sourcePath="$1"
+    local  branches="$( GetStrictCSV "${Options_Merge}" )"
+    local  branch0="${branches%%,*}"  #// left of ","
+    if [ "${branch0}" == "${branches}" ]; then
+        local  mergingBranchesCSV=""
+    else
+        local  mergingBranchesCSV="${branches#*,*}"  #// right of ","
+    fi
+    local  mergingBranches=( )  &&  IFS=',' read -ra  mergingBranches  <<< "${mergingBranchesCSV}"
+    local  errorExists="false"
+    if [ "${Options_Check}" != "" ]; then
+        local  runWithEcho=""
+        local  redirect=/dev/null
+    else
+        local  runWithEcho=RunWithEcho
+        local  redirect=/dev/stdout
+    fi
+    if IsURL "${sourcePath}"; then
+        Setting_RepositoryURL+=( "${sourcePath}" )
+    else
+        local  localFullPath="$( readlink -f "${sourcePath}" )"
+        AssertExist  "${localFullPath}"
+        Setting_LocalGitWorkingFullPath+=( "${localFullPath}" )
+    fi
+    Setting_BranchOrTag+=("${branch0}")
+
+    CreateWorkingFiles  0  "${WorkingFolderPath}/working"
+    cd  "${WorkingFolderPath}/working"
+    $runWithEcho  git config --local  rerere.enabled  false  > $redirect
+    $runWithEcho  git config --local  rerere.autoupdate  false  > $redirect
+    local  branch=""
+    echo  "base branch: ${branch0}"
+    for branch in "${mergingBranches[@]}"; do
+        echo  ""  > $redirect
+        echo  "incoming branch: ${branch}"
+        if IsURL "${sourcePath}"; then
+            mergingBranch="origin/${branch}"
+        else
+            mergingBranch="${branch}"
+        fi
+        local  mergeLogPath="${WorkingFolderPath}/_merge_${branch}.log"
+
+        $runWithEcho \
+            git merge  --no-ff --no-edit  "${mergingBranch}"  2>&1  |  \
+                tee  "${mergeLogPath}"  > $redirect
+        local  exitCodes="${PIPESTATUS[@]}"
+        local  errorLogGuide="Log: \"${mergeLogPath}\", Working: \"${WorkingFolderPath}/working\""
+
+        if grep "CONFLICT"  "${mergeLogPath}" > /dev/null; then
+            echo -e  "${Red}CONFLICT${DefaultColor}: ${errorLogGuide}"  >&2
+            errorExists="true"
+        elif [ "${exitCodes}" != "0 0" ]; then
+            echo -e  "${Red}ERROR${DefaultColor}: ${errorLogGuide}"  >&2
+            errorExists="true"
+        fi
+    done
+
+    if [ "${Options_Check}" != "" ]; then
+        if [ "${errorExists}" == "true" ]; then
+            return  1
+        else
+            echo  "No conflict"
+        fi
+    else
+        OpenIDE  "${WorkingFolderPath}/working"
     fi
 }
 
@@ -157,11 +250,20 @@ function  CreateWorkingFiles() {
     local  outputFolderPath="$2"
     local  settingName="${Setting_Name[${index}]}"
     local  localFullPath="${Setting_LocalFullPath[${index}]}"
+    local  localGitWorkingFullPath="${Setting_LocalGitWorkingFullPath[${index}]}"
     local  repositoryURL="${Setting_RepositoryURL[${index}]}"
     local  branchOrTag="${Setting_BranchOrTag[${index}]}"
     local  baseRelativePath="${Setting_BaseRelativePath[${index}]}"
+    if [ "${Options_Check}" != "" ]; then
+        local  runWithEcho=""
+        local  redirect=/dev/null
+    else
+        local  runWithEcho=RunWithEcho
+        local  redirect=/dev/stdout
+    fi
 
-    rm -rf  "${outputFolderPath}"
+    rm -rf  "${outputFolderPath}"  > $redirect
+
     if [ "${localFullPath}" != "" ]; then  #// Copy
 
         local  excludeOptions=""
@@ -173,24 +275,34 @@ function  CreateWorkingFiles() {
         if [ -e "${outputFolderPath}/.git" ]; then
             mv  "${outputFolderPath}/.git"  "${outputFolderPath}/.git_"
         fi
-    else  #// git clone
+
+    elif [ "${localGitWorkingFullPath}" != "" ]; then
+        AssertExist  "${localGitWorkingFullPath}/.git"
+
+        CopyFolder  "${localGitWorkingFullPath}/.git"  "${outputFolderPath}/.git"
+        pushd  "${outputFolderPath}"  > /dev/null  ||  Error
+        git checkout "."  > /dev/null 2>&1  ||  Error
+        git checkout  "${branchOrTag}"  > /dev/null 2>&1  ||  Error
+        popd  > /dev/null
+
+    else  #// git clone. ${repositoryURL} != ""
         local  options=""
         if [ "${branchOrTag}" != "" ]; then
             options="${options}  -b ${branchOrTag}"
         fi
         if [ "${baseRelativePath}" == "." ]; then
 
-            git clone  "${repositoryURL}" ${options}  "${outputFolderPath}"  ||  Error
-            rm -rf  "${outputFolderPath}/.git"
+            git clone  "${repositoryURL}" ${options}  "${outputFolderPath}"  > $redirect  ||  Error
+            rm -rf  "${outputFolderPath}/.git"  > $redirect
         elif [ "${baseRelativePath:0:2}" == ".." ]; then
             Error  "ERROR: BaseRelativePath cannot be set a parent folder."
         else
             test  "$( LessThanVersion "$(git --version)" "2.26.0" )"  == "${False}"  ||  Error  "ERROR: Requires git 2.26.0 or higher"
             git clone  --filter=blob:none --sparse  "${repositoryURL}" ${options} \
-                "${WorkingFolderPathDefault}/workingOfWorking"  ||  Error
+                "${WorkingFolderPathDefault}/workingOfWorking"  > $redirect  ||  Error
             pushd  "${WorkingFolderPathDefault}/workingOfWorking"  > /dev/null  ||  Error
 
-            git sparse-checkout set "${baseRelativePath}"
+            git sparse-checkout set "${baseRelativePath}"  > $redirect
             popd  > /dev/null
             rm -rf  "${outputFolderPath}"
 
@@ -230,6 +342,8 @@ function  CopyDiffFiles() {
     local  folderPathB="${Setting_LocalFullPath[${indexB}]}"
     local  filePath
 
+    mkdir -p  "${folderPathA}"
+    mkdir -p  "${folderPathB}"
     local  diffFilePaths="$( GetDiffFilePaths "${folderPathA}"  "${folderPathB}" )"
     while IFS= read -r filePath; do  #// filePath=( read file in "diffFilePaths" )
         local  sourceFilePathA="${folderPathA}/${filePath}"
@@ -549,6 +663,51 @@ function  SetReadOnlyOrNot() {
     fi
 }
 
+#section: Process
+
+function  RunWithEcho() {
+    local  optionsText=""
+    if [ "${1:0:13}" == "--output-sed=" ]; then
+        local  sedParameters="${1:13}"  #// Use \s instead of space
+        optionsText="${optionsText}--output-sed=____ "
+        shift
+    else
+        sedParameters=""
+    fi
+    if [ "${optionsText}" != "" ]; then
+        optionsText="$ ${optionsText}"
+    fi
+
+    echo  "$ cd  \"${PWD}\""
+    if [ "${sedParameters}" == "" ]; then
+        echo  "${optionsText}$ $( GetArgumentsString "$@" )"  >&2
+    else
+        echo  "${optionsText}$ $( GetArgumentsString "$@" )"  |  sed -E "${sedParameters}"  >&2
+    fi
+
+    "$@"
+}
+
+function  GetArgumentsString() {
+    local  arguments=""
+
+    for argument in "$@"; do
+        if [ "${argument:0:1}" == "-" ]; then
+            arguments="${arguments} ${argument}"
+        elif [ "${argument}" == ""  -o  "${argument}" == "&&"  -o  "${argument}" == "||" ]; then
+            arguments="${arguments} \"${argument}\""
+        elif [ "$( echo "${argument}" | sed -E 's- |\.|/--' )" != "${argument}" ]; then  #// has space, period or slash
+            arguments="${arguments} \"${argument}\""
+        else
+            arguments="${arguments} ${argument}"
+        fi
+    done
+
+    echo  "${arguments:1}"
+}
+
+#section: File
+
 function  CopyFolder() {
     local  source="$1"
     local  destination="$2"
@@ -669,6 +828,41 @@ function  GetFullPath() {
     echo  "${fullPath}"
 }
 
+function  IsURL() {
+    echo  "$1"  |  grep -E "^[a-z]+://"  > /dev/null
+}
+
+function  AssertExist() {
+    local  path="$1"
+    local  leftOfWildcard="${path%\**}"
+    if [ "${leftOfWildcard}" == "${path}" ]; then  #// No wildcard
+
+        if [ ! -e "${path}" ]; then
+            Error  "ERROR: Not found \"${path}\""
+        fi
+    else
+        local  rightOfWildcard="${path##*\*}"
+        if [ ! -e "${leftOfWildcard}"*"${rightOfWildcard}" ]; then
+            Error  "ERROR: Not found \"${path}\""
+        fi
+    fi
+}
+
+function  AssertNotExist() {
+    local  path="$1"
+
+    if [ -e "${path}" ]; then
+        Error  "ERROR: Found \"${path}\""
+    fi
+}
+
+#section: String
+
+function  GetStrictCSV() {
+    #// This version does not support comma-containing values
+    echo "$1" | sed 's/ *, */,/g'
+}
+
 function  CutLastOf() {
     local  wholeString="$1"
     local  lastExpected="$2"
@@ -683,6 +877,8 @@ function  CutLastOf() {
 function  CutDoubleQuotation() {
     echo  "$1"  |  sed -E 's/^"|"$//g'
 }
+
+#section: IniFile
 
 function  ParseIniFileLineType() {
     local  line="$1"
@@ -720,6 +916,8 @@ function  ParseIniFileParameterValue() {
     fi
 }
 
+#section: Git
+
 function  gitInitOption() {
     if [ "$( LessThanVersion "$(git --version)" "2.31.1" )" == "${True}" ]; then
         echo  ""
@@ -728,9 +926,11 @@ function  gitInitOption() {
     fi
 }
 
-# LessThanVersion
-#     if [ "$( LessThanVersion "$(git --version)" "2.31.1")" == "${True}" ]; then
+#section: Others
+
 function  LessThanVersion() {
+    # LessThanVersion
+    #     if [ "$( LessThanVersion "$(git --version)" "2.31.1")" == "${True}" ]; then
     local  textContainsVersionA="$1"
     local  textContainsVersionB="$2"
     local  isGoodFormat="${True}"
@@ -759,13 +959,13 @@ function  LessThanVersion() {
     echo "${False}"
 }
 
-# Evaluate
-#     Expand variables
-# Example:
-#     var1='value  1'
-#     var2='${var1}  2'
-#     evaluated="$( Evaluate "${var2}" )"  #// value  1  2
 function  Evaluate() {
+    # Evaluate
+    #     Expand variables
+    # Example:
+    #     var1='value  1'
+    #     var2='${var1}  2'
+    #     evaluated="$( Evaluate "${var2}" )"  #// value  1  2
     local  expression="$1"
     eval echo "$( eval echo '\""${expression}"\"' )"
 }
@@ -883,6 +1083,19 @@ function  GetCodePosition() {
     echo  "${fileName}:${lineNum}"
 }
 
+function  PrintCallStack() {
+    echo  "Call stack:"  >&2
+    local  index=0
+    local  frame
+    while frame=( $( caller "${index}" ) ); do
+        local  functionName="${frame[1]}"
+        local  fileName="${frame[2]}"
+        local  lineNum="${frame[0]}"
+        echo  "    ${functionName} (${fileName}:${lineNum})"  >&2
+        (( index += 1 ))  ||  true
+    done
+}
+
 #section: Error
 
 function  ExitIfMatched() {
@@ -913,7 +1126,7 @@ function  Error() {
         local  seeChildProcessMessage=""
     fi
 
-    # PrintCallStack
+    PrintCallStack
 
     echo -e  "${seeChildProcessMessage}${errorMessage}"  >&2
     if [ "${MSYSTEM}" == "MINGW64" ]; then
@@ -923,26 +1136,64 @@ function  Error() {
 }
 
 function  ModifyGlobalVariables() {
-    if [ "${USERPROFILE}" == "" ]; then  #// for WSL2
-        if [ "${USERNAME}" == "" ]; then  #// If USERNAME was not defined in parent script
+
+    #// Set default values. "! -v" means that variable is not defined.
+    if ! [[ -v http_proxy ]]; then  http_proxy=""  ;fi
+    if ! [[ -v https_proxy ]]; then  https_proxy=""  ;fi
+    if ! [[ -v no_proxy ]]; then  no_proxy=""  ;fi
+    if ! [[ -v HTTP_PROXY ]]; then  __VariHTTP_PROXYableName__=""  ;fi
+    if ! [[ -v HTTPS_PROXY ]]; then  HTTPS_PROXY=""  ;fi
+    if ! [[ -v NO_PROXY ]]; then  NO_PROXY=""  ;fi
+    echo  "http_proxy = ${http_proxy}"
+    echo  "https_proxy = ${https_proxy}"
+    echo  "no_proxy = '${no_proxy}'"
+    echo  "HTTP_PROXY = ${HTTP_PROXY}"
+    echo  "HTTPS_PROXY = ${HTTPS_PROXY}"
+    echo  "NO_PROXY = '${NO_PROXY}'"
+
+    #// USER, USERNAME, HOME, USERPROFILE, ProgramFiles = ...
+    if [ -e "/c/Windows" ]; then  #// if Windows Git bash
+        ScriptEnvironment="Windows"
+        export USER="${USERNAME}"
+        export USERPROFILE="${HOME}"
+        export HOME2="${USERPROFILE}"
+        export ProgramFiles="/c/Program Files"
+    elif [  -e "/mnt/c/" ] && [ "${PWD:0:7}" == "/mnt/c/" ]; then  #// if Linux on WSL2
+        ScriptEnvironment="Linux"
+        if ! [[ -v USERNAME ]]; then  #// If USERNAME was not defined in parent script  #// "! -v" means that variable is not defined.
             export USERNAME="$( /mnt/c/WINDOWS/system32/cmd.exe /c 'echo %USERNAME%'  2> /dev/null )"
             export USERNAME="${USERNAME:0:${#USERNAME}-1}"  #// Cut last CR
         fi
         export USERPROFILE="/mnt/c/Users/${USERNAME}"
-    else
-        export USERPROFILE="$( echo "${USERPROFILE}" | sed 's/\\/\//g' )"
+        export HOME2="${USERPROFILE}"
+        export ProgramFiles="/mnt/c/Program Files"
+    else  #// if Linux
+        ScriptEnvironment="Linux"
+        export USERNAME="${USER}"
+        export USERPROFILE=""
+        export HOME2="${HOME}"
+        export ProgramFiles=""
+    fi
+    if [ "${ScriptEnvironment}" == "Linux" ]; then
+        if [ "${USER}" == "root" ]; then
+            ScriptEnvironment="LinuxRoot"
+        else
+            ScriptEnvironment="LinuxUser"
+        fi
     fi
     if [ "${PWD:0:7}" == "/mnt/c/" ]; then
         WslMnt="/mnt"
     fi
 
     #// Expand ~
-    WorkingFolderPathDefault="$( echo "${WorkingFolderPathDefault}"  |  sed -E "s|^~|${USERPROFILE}|" )"
-    WorkingFolderPath="$( echo "${WorkingFolderPath}"  |  sed -E "s|^~|${USERPROFILE}|" )"
+    WorkingFolderPathDefault="$( echo "${WorkingFolderPathDefault}"  |  sed -E "s|^~|${HOME2}|" )"
+    WorkingFolderPath="$( echo "${WorkingFolderPath}"  |  sed -E "s|^~|${HOME2}|" )"
 }
 
 True=0
 False=1
+DefaultColor="\e[0m"
+Red="\e[91m"
 GitInitOption=$(gitInitOption)
 Setting_Name=( )
 Setting_LocalFullPath=( )
