@@ -140,9 +140,11 @@ Git リポジトリ からダウンロードする場合：
     test/test_codediff.sh
     test/test_codediff.sh --manual-test
 
-### Windows git bash の場合
+### WSL2 の中でテストを起動するコマンド
 
 WSL2 をインストールして実行すると安定します。
+
+Windows git bash から
 
     cd  test
     wsl ./test_codediff.sh

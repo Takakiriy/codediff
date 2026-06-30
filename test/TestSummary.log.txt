@@ -1,0 +1,13 @@
+
+Test Summary ----------------------------------------------------
+2026-06-29T22:43:07+09:00 Pass [parameters]
+2026-06-29T22:43:07+09:00 Pass [local/1]
+2026-06-29T22:43:10+09:00 Pass [repository/1]
+2026-06-29T22:43:14+09:00 Pass [repository/subFolder]
+2026-06-29T22:43:15+09:00 Pass [delete]
+2026-06-29T22:43:17+09:00 Pass [inText]
+2026-06-29T22:43:17+09:00 Pass [copyFolder]
+2026-06-29T22:43:17+09:00 Pass [same]
+2026-06-29T22:43:23+09:00 Pass [conflictCheck]
+ErrorCount: 0
+[92mPass.[0m

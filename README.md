@@ -126,14 +126,16 @@ It is not necessary to write `ExcludeRelativePath` in all sections.
 
 ## Test
 
-### Commands
+### Command
 
     test/test_codediff.sh
     test/test_codediff.sh --manual-test
 
-### Case of Windows git bash
+### Command of starting test in WSL2
 
 You can install and run WSL. It will be stable.
+
+From Windows git bash:
 
     cd  test
     wsl ./test_codediff.sh

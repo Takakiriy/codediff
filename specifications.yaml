@@ -6,21 +6,26 @@ Main:
     #         CopyIniFile  "${iniFilePath}"
     MakeIniFileFromParameters:
     CopyIniFile:
-    if: #// [ ! -e "${WorkingFolderPath}/.codediff.ini" ]; then
-        MakeWorkingFolderIfNot:
-        OpenIDE:
-    else:
-        # ParseIniFile  "${WorkingFolderPath}/.codediff.ini"  "${iniFilePath}"
-        # CreateWorkingFiles  0  "${WorkingFolderPath}/working_0"
-        # CreateWorkingFiles  1  "${WorkingFolderPath}/working_1"
-        # CreateNewGitWorking  "${WorkingFolderPath}/working_0"  "${WorkingFolderPath}/working_1"
-        ParseIniFile:
-            # AppendSetting  "${settingName}"  "${localFullPath}"  "${repositoryURL}"  "${branchOrTag}"  "${baseRelativePath}"  "${iniFileSourcePath}"
-            AppendSetting:
+    Diff:
+        if: #// [ ! -e "${WorkingFolderPath}/.codediff.ini" ]; then
+            MakeWorkingFolderIfNot:
+            OpenIDE:
+        else:
+            # ParseIniFile  "${WorkingFolderPath}/.codediff.ini"  "${iniFilePath}"
+            # CreateWorkingFiles  0  "${WorkingFolderPath}/working_0"
+            # CreateWorkingFiles  1  "${WorkingFolderPath}/working_1"
+            # CreateNewGitWorking  "${WorkingFolderPath}/working_0"  "${WorkingFolderPath}/working_1"
+            ParseIniFile:
+                # AppendSetting  "${settingName}"  "${localFullPath}"  "${repositoryURL}"  "${branchOrTag}"  "${baseRelativePath}"  "${iniFileSourcePath}"
+                AppendSetting:
+            CreateWorkingFiles 0:
+            CreateWorkingFiles 1:
+            CreateNewGitWorking:
+            OpenIDE:
+    Merge:
         CreateWorkingFiles 0:
-        CreateWorkingFiles 1:
-        CreateNewGitWorking:
-        OpenIDE:
+        # git merge
+        # if grep "CONFLICT"  "${mergeLogPath}"
 Test:  #ref: test/test_codediff.sh
     (command):  #ref: ./README.md### Test
     TestParameters:

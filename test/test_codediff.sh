@@ -1,13 +1,33 @@
 #!/bin/bash
+ParentProcessCurrentFolder="${PWD}"
 ThisScriptParentPath="$( readlink -f "${0%/*}" )"
 ProjectPath="${ThisScriptParentPath%/*}"
 cd  "${ThisScriptParentPath}"
+ThisScriptFullPath="$( readlink -f "${0##*/}" )"
+
+Tests=(  #// --test option values
+    "parameters"
+    "local/1"
+    "local/branch"
+    "repository/1"
+    "repository/subFolder"
+    "delete"
+    "inText"
+    "copyFolder"
+    "same"
+    "conflictCheck"
+)
 
 PositionalArgs=()
+AllArguments=( "$@" )
 while [[ $# -gt 0 ]]; do
     case $1 in
         -m|--manual-test)  Options_ManualTest="yes"; shift;;  #// Without value
-        -*) echo "Unknown option $1"; exit 1;;
+        -l|--list)  Options_List="yes"; shift;;
+        -t|--test)  Options_Test="$2"; shift; shift;;
+        --no-log)   Options_NoLog="yes"; shift;;
+        --) shift;  PositionalArgs+=("$@"); set --;;
+        --*) echo "Unknown option $1"; exit 1;;
         *) PositionalArgs+=("$1"); shift;;
     esac
 done
@@ -15,24 +35,37 @@ set -- "${PositionalArgs[@]}"  #// set $1, $2, ...
 unset PositionalArgs
 
 function  Main() {
-    ModifyGlobalVariables
+    if [ "${Options_List}" != "" ]; then
+        echo  "${Tests[@]}" | sed "s/ /\n/g"
+    elif !( TestOptionIsValid ); then
+        echo  "ERROR: Not found test name \"${Options_Test}\". See \"Tests\" variable in \"${ThisScriptWindowsFullPath}\"." >&2
+    elif [ "${Options_NoLog}" == "" ]; then
+        cd  "${ParentProcessCurrentFolder}"
 
-    TestParameters
-    TestLocal
-    # TestLocalBranch
-    TestGitRepository
-    TestGitRepositorySubFolder
-    TestOfDelete
-    TestInText
-    TestCopyFolder
-    TestSame
-    TestConflictCheck
-    EndOfTest
+        LogFilePath="${LogFilePath}"  "${ThisScriptFullPath}" --no-log  "${AllArguments[@]}"  |  tee  "${LogFilePath}"  #// Enable this script log
+        CheckLog
+    else
+        ModifyGlobalVariables
+
+        #// Tests
+        RunTest  "parameters"            TestParameters
+        RunTest  "local/1"               TestLocal
+        # RunTest  "local/branch"          TestLocalBranch
+        RunTest  "repository/1"          TestGitRepository
+        RunTest  "repository/subFolder"  TestGitRepositorySubFolder
+        RunTest  "delete"                TestOfDelete
+        RunTest  "inText"                TestInText
+        RunTest  "copyFolder"            TestCopyFolder
+        RunTest  "same"                  TestSame
+        RunTest  "conflictCheck"         TestConflictCheck
+        EndOfTest  |  tee  "TestSummary.log.txt"
+        return  "$( GetFirstNonZeroValue "${PIPESTATUS[@]}" )"
+    fi
 }
 
+#section: TestCode
+
 function  TestParameters() {
-    echo  ""
-    echo  "TestParameters =================================="
     local  workingFolderPath="${HOME2}/_tmp/_diff/1"
 
     rm -rf  "${HOME2}/_tmp/_diff"
@@ -60,8 +93,6 @@ function  TestParameters() {
 }
 
 function  TestLocalBranch() {
-    echo  ""
-    echo  "TestLocalBranch =================================="
 
     #// Set up local repository
     rm -rf  "${ProjectPath}/test/_repository.git"
@@ -83,12 +114,11 @@ function  TestLocalBranch() {
     git commit -m "Feature commit"
 
     git push --set-upstream origin feature
+rm -rf  "${ProjectPath}/test/_repository.git"
 Error  "not implemented"
 }
 
 function  TestLocal() {
-    echo  ""
-    echo  "TestLocal =================================="
     local  workingFolderPath="${HOME2}/_tmp/_diff/1"
 
     #// 1st command
@@ -116,8 +146,6 @@ function  TestLocal() {
 }
 
 function  TestGitRepository() {
-    echo  ""
-    echo  "TestGitRepository =================================="
     local  workingFolderPath="${HOME2}/_tmp/_diff/1"
     rm -rf  "${HOME2}/_tmp/_diff"
     rm -f  "_codediff.log"
@@ -136,8 +164,6 @@ function  TestGitRepository() {
 }
 
 function  TestGitRepositorySubFolder() {
-    echo  ""
-    echo  "TestGitRepositorySubFolder =================================="
     local  workingFolderPath="${HOME2}/_tmp/_diff/1"
     rm -rf  "${HOME2}/_tmp/_diff"
     rm -f  "_codediff.log"
@@ -156,8 +182,6 @@ function  TestGitRepositorySubFolder() {
 }
 
 function  TestOfDelete() {
-    echo  ""
-    echo  "TestOfDelete =================================="
     local  workingFolderPath="${HOME2}/_tmp/_diff/1"
     rm -rf  "${HOME2}/_tmp/_diff"
     rm -f  "_codediff.log"
@@ -206,8 +230,6 @@ function  TestInText() {
 }
 
 function  TestCopyFolder() {
-    echo  ""
-    echo  "TestCopyFolder =================================="
     MakeCopySource  "_work/source"
 
     CopyFolder  "_work/source"  "_work/destination"
@@ -255,8 +277,6 @@ local  answer=\
 }
 
 function  TestConflictCheck() {
-    echo  ""
-    echo  "TestConflictCheck =================================="
     local  lf=$'\n'
 
     #// Conflict in repository
@@ -281,7 +301,30 @@ function  TestConflictCheck() {
     ../codediff  ${TestOption}  "./_work"  --merge "main, feature_1, feature_2"  --check  &&  Error
     ../codediff  ${TestOption}  "./_work"  --merge "main, feature_2"             --check  ||  Error
 
+    #// Not clean case
+    GitInitForTest  "./_work"
+    GitAddCommitForTest  "./_work"  "main"  "main"       "Make commit base"  "aaa${lf}bbb${lf}ccc${lf}ddd${lf}eee"
+    GitAddCommitForTest  "./_work"  "main"  "feature_1"  "feature-1 commit"  "aaa${lf}BBBBB${lf}ccc${lf}ddd${lf}eee"
+    GitAddCommitForTest  "./_work"  "main"  "feature_2"  "feature-2 commit"  "aaa${lf}B--BB${lf}ccc${lf}ddd${lf}eee"
+    echo  "changed"  >>  "./_work/a.txt"
+
+    ../codediff  ${TestOption}  "./_work"  --merge "feature_1, feature_1"  --check  ||  Error
+
     rm -rf  "./_work"
+}
+
+function  TestSame() {
+    local  workingFolderPath="$HOME/_tmp/_diff/1"
+    rm -rf  "$HOME/_tmp/_diff"
+    rm -f  "_codediff.log"
+    rm -rf  "files/__repository_1"
+    mkdir -p  "${workingFolderPath}"
+    cp -ap  "files/repository_1"  "files/__repository_1"
+
+    ../codediff  ${TestOption}  "files/repository_1"  "files/__repository_1"  ||  Error
+    rm -rf  "$HOME/_tmp/_diff"
+    rm -f  "_codediff.log"
+    rm -rf  "files/__repository_1"
 }
 
 function  GitInitForTest() {
@@ -334,20 +377,57 @@ function  AssertExist() {
     fi
 }
 
-function  TestSame() {
-    echo  ""
-    echo  "TestSame =================================="
-    local  workingFolderPath="$HOME/_tmp/_diff/1"
-    rm -rf  "$HOME/_tmp/_diff"
-    rm -f  "_codediff.log"
-    rm -rf  "files/__repository_1"
-    mkdir -p  "${workingFolderPath}"
-    cp -ap  "files/repository_1"  "files/__repository_1"
+#section: TestSuite
 
-    ../codediff  ${TestOption}  "files/repository_1"  "files/__repository_1"  ||  Error
-    rm -rf  "$HOME/_tmp/_diff"
-    rm -f  "_codediff.log"
-    rm -rf  "files/__repository_1"
+function  RunTest() {
+    local  testName="$1"
+    shift
+    CheckTestName  "${testName}"
+    if ! ShouldRunTest "${testName}"; then  return  ;fi
+    echo  ""
+    echo  "### RunTest [${testName}] --------------------------------"
+    echo  "$@"  |  sed -E  's/^/'"$( date --iso-8601=seconds )"' /'
+    local  lf=$'\n'
+
+    ( "$@" )  #// Run in subshell for catching error exit
+        #// To check "PIPESTATUS", Write the following code at the last of "$@" function:
+        #//     return  "$( GetFirstNonZeroValue "${PIPESTATUS[@]}" )"
+    local  exitCode="$?"
+    if [ "${exitCode}" != 0 ]; then
+        PrintCallStack
+        local  endDate="$( date --iso-8601=seconds )"
+        echo  "$@"  |  sed -E  's/^/'"${endDate}"' (end) /'  >&2
+        ErrorCount=$(( ${ErrorCount} + 1 ))
+        TestSummary="${TestSummary}${lf}${Red}${endDate} Fail [${testName}]: Error ${exitCode}, Search \"### RunTest [${testName}] ---\" in \"${LogFilePath}\" file.${DefaultColor}"
+    else
+        TestSummary="${TestSummary}${lf}$( date --iso-8601=seconds ) Pass [${testName}]"
+    fi
+}
+ErrorCount=0
+TestSummary=""
+
+function  EndOfTest() {
+    echo  ""
+    echo  "Test Summary ----------------------------------------------------"
+    echo -e  "${TestSummary:1}"
+    if [ "${ErrorCount}" == "0" ]; then
+        echo  "ErrorCount: ${ErrorCount}"
+        echo -e  "${Green}Pass.${DefaultColor}"
+    else
+        echo -e  "${Red}ErrorCount: ${ErrorCount}${DefaultColor}"
+        PrintCallStack
+        return  1
+    fi
+}
+
+function  CheckLog() {
+    if [ -e "test-cli.log" ]; then
+        diff  "${LogFilePath}"  "test-cli.log"  ||  Error  "ERROR: different between \"${LogFilePath}\" and \"test-cli.log\"."
+        rm  "${LogFilePath}"
+        echo  "Test log is same as \"test-cli.log\" file."
+    else
+        echo -e  "Log File: \"${LogFilePath}\""
+    fi
 }
 
 function  MakeCopySource() {
@@ -641,16 +721,107 @@ function  GetCodePosition() {
 }
 
 function  PrintCallStack() {
-    echo  "Call stack:"  >&2
+    echo  "Call stack:$( wait )"  >&2  #// "wait" waits stdout buffer empty.
     local  index=0
     local  frame
+    local  oldIFS="$IFS"
+    IFS=" "
     while frame=( $( caller "${index}" ) ); do
         local  functionName="${frame[1]}"
         local  fileName="${frame[2]}"
         local  lineNum="${frame[0]}"
+        fileName="$( echo "${fileName}"  |  sed -E  "s|^\\./|${ParentProcessCurrentFolder}/|"  |  sed -E 's|^/c/|c:/|' )"
         echo  "    ${functionName} (${fileName}:${lineNum})"  >&2
         (( index += 1 ))  ||  true
     done
+    IFS="$oldIFS"
+}
+
+function  ShouldRunTest() {
+    local  thisTest="$1"
+    if [ "${Options_Test}" == "" ]; then
+        return  0  #// true
+    else
+        local  optionsTest="$( GetStrictCSV "${Options_Test}" )"
+        if [[ ",${optionsTest}," == *",${thisTest},"* ]]; then  #// strict CSV item match
+            return  0  #// true
+        else
+            return  1  #// false
+        fi
+    fi
+}
+
+function  CheckTestName() {
+    local  testName="$1"
+    local  name
+    for name in "${Tests[@]}"; do
+        if [ "${testName}" == "${name}" ]; then
+            return  0
+        fi
+    done
+
+    echo -e  "${Yellow}WARNING: Test name \"${testName}\" is not found in \"Tests\" variable.${DefaultColor}"  >&2
+    PrintCallStack
+}
+
+function  TestOptionIsValid() {
+    if [ "${Options_Test}" == "" ]; then
+        return  0  #// true
+    else
+        local  optionsTestArray=( $( echo ${Options_Test}  |  sed 's/,/ /g' ) )
+        local  testsCSV="$( GetStrictCSVFromArray "${Tests[@]}" )"
+        local  exitCode=0
+        local  testOption
+        local  testName
+
+        for testOption in "${optionsTestArray[@]}"; do
+            if [[ ",${testsCSV}," != *",${testOption},"* ]]; then  #// strict CSV item NOT match
+                exitCode=1
+            fi
+        done
+
+        for testName in "${Tests[@]}"; do
+            if [ "${testName%% *}" != "${testName}" ]; then  #// "testName" has space
+                echo -e  "${Yellow}WARNING: Test name \"${testName}\" must not have space.${DefaultColor}"  >&2
+                PrintCallStack
+                exitCode=1
+            fi
+        done
+
+        return  "${exitCode}"
+    fi
+}
+
+function  GetStrictCSV() {
+    #// Example:  local  csv="$( GetStrictCSV "${csv}" )"
+    #// This version does not support comma-containing values
+    local  csv="$1"
+    echo "${csv}" | sed 's/ *, */,/g'  #// Cut spaces around comma
+}
+
+function  GetStrictCSVFromArray() {
+    #// Example:  local  csv="$( GetStrictCSVFromArray "${array[@]}" )"
+    (
+        IFS=,
+        printf '%s' "$*"
+    )
+}
+
+function  GetFirstNonZeroValue() {
+    #// Example:
+    #//     - return  $( GetFirstNonZeroValue "${PIPESTATUS[@]}" )
+    #//     - $( GetFirstNonZeroValue  0 0 3 0 ) == "3"
+    #//     - $( GetFirstNonZeroValue  0 0 0 0 ) == "0"
+    local  values=("$@")
+    local  value
+
+    for value in "${values[@]}"; do
+        if (( "${value}" != 0 )); then
+            echo  "${value}"
+            return
+        fi
+    done
+    echo  "0"
 }
 
 function  Error() {
@@ -681,14 +852,6 @@ function  TestError() {
 }
 ErrorCount=0
 
-function  EndOfTest() {
-    echo  ""
-    echo  "ErrorCount: ${ErrorCount}"
-    if [ "${ErrorCount}" == "0" ]; then
-        echo  "Pass."
-    fi
-}
-
 GitInitOption=$(gitInitOption)
 
 True=0
@@ -698,5 +861,13 @@ if [ "${Options_ManualTest}" != "" ]; then
 else
     TestOption=" --test"
 fi
+mkdir -p  "working"
+if [ "${LogFilePath}" == "" ]; then
+    LogFilePath="working/_all_$( date --iso-8601=seconds | sed "s/:/_/g" ).log"
+fi
+DefaultColor="\e[0m"
+Red="\e[91m"
+Yellow="\e[93m"
+Green="\e[92m"
 
-Main
+Main "$@"

@@ -41,7 +41,11 @@ function  Main() {
     local  comparePathA="$1"  #// $1 is shared
     local  comparePathB="$2"
     local  sourcePath="$1"
-    ModifyGlobalVariables
+    if [ "${Options_Check}" != "" ]; then
+        ModifyGlobalVariables  >  /dev/null
+    else
+        ModifyGlobalVariables
+    fi
     iniFilePath="$( GetWslPathFromWindowsPath "${iniFilePath}" )"
 
     if [ "${comparePathA}" != "" ] && [ "${comparePathB}" != "" ]; then
@@ -129,8 +133,14 @@ function  Merge() {
         echo  "incoming branch: ${branch}"
         if IsURL "${sourcePath}"; then
             mergingBranch="origin/${branch}"
+            if [ "$( git branch --all  |  grep -E "/${mergingBranch}$" )" == "" ]; then
+                Error  "ERROR: Specified branch or tag name is not found. Specified branch: ${mergingBranch}"
+            fi
         else
             mergingBranch="${branch}"
+            if [ "$( git branch --all  |  grep -E " ${mergingBranch}$|/origin/${mergingBranch}$" )" == "" ]; then
+                Error  "ERROR: Specified branch or tag name is not found. Specified branch: ${mergingBranch}"
+            fi
         fi
         local  mergeLogPath="${WorkingFolderPath}/_merge_${branch}.log"
 
@@ -282,7 +292,7 @@ function  CreateWorkingFiles() {
         CopyFolder  "${localGitWorkingFullPath}/.git"  "${outputFolderPath}/.git"
         pushd  "${outputFolderPath}"  > /dev/null  ||  Error
         git checkout "."  > /dev/null 2>&1  ||  Error
-        git checkout  "${branchOrTag}"  > /dev/null 2>&1  ||  Error
+        git checkout  "${branchOrTag}"  > /dev/null 2>&1  ||  Error  "ERROR: Specified branch or tag name is not found. Specified branch: ${branchOrTag}"
         popd  > /dev/null
 
     else  #// git clone. ${repositoryURL} != ""
