@@ -148,7 +148,7 @@ function  Merge() {
             git merge  --no-ff --no-edit  "${mergingBranch}"  2>&1  |  \
                 tee  "${mergeLogPath}"  > $redirect
         local  exitCodes="${PIPESTATUS[@]}"
-        local  errorLogGuide="Log: \"${mergeLogPath}\", Working: \"${WorkingFolderPath}/working\""
+        local  errorLogGuide="Log: \"${mergeLogPath}\", Conflicted Working: \"${WorkingFolderPath}/working\""
 
         if grep "CONFLICT"  "${mergeLogPath}" > /dev/null; then
             echo -e  "${Red}CONFLICT${DefaultColor}: ${errorLogGuide}"  >&2
