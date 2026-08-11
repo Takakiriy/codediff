@@ -300,6 +300,7 @@ function  CreateWorkingFiles() {
         if [ "${branchOrTag}" != "" ]; then
             options="${options}  -b ${branchOrTag}"
         fi
+        ShowProxyVariables
         if [ "${baseRelativePath}" == "." ]; then
 
             git clone  "${repositoryURL}" ${options}  "${outputFolderPath}"  > $redirect  ||  Error
@@ -1145,21 +1146,16 @@ function  Error() {
     exit  "${exitCode}"
 }
 
-function  ModifyGlobalVariables() {
-
-    #// Set default values. "! -v" means that variable is not defined.
-    if ! [[ -v http_proxy ]]; then  http_proxy=""  ;fi
-    if ! [[ -v https_proxy ]]; then  https_proxy=""  ;fi
-    if ! [[ -v no_proxy ]]; then  no_proxy=""  ;fi
-    if ! [[ -v HTTP_PROXY ]]; then  __VariHTTP_PROXYableName__=""  ;fi
-    if ! [[ -v HTTPS_PROXY ]]; then  HTTPS_PROXY=""  ;fi
-    if ! [[ -v NO_PROXY ]]; then  NO_PROXY=""  ;fi
+function  ShowProxyVariables() {
     echo  "http_proxy = ${http_proxy}"
     echo  "https_proxy = ${https_proxy}"
     echo  "no_proxy = '${no_proxy}'"
     echo  "HTTP_PROXY = ${HTTP_PROXY}"
     echo  "HTTPS_PROXY = ${HTTPS_PROXY}"
     echo  "NO_PROXY = '${NO_PROXY}'"
+}
+
+function  ModifyGlobalVariables() {
 
     #// USER, USERNAME, HOME, USERPROFILE, ProgramFiles = ...
     if [ -e "/c/Windows" ]; then  #// if Windows Git bash
@@ -1168,9 +1164,9 @@ function  ModifyGlobalVariables() {
         export USERPROFILE="${HOME}"
         export HOME2="${USERPROFILE}"
         export ProgramFiles="/c/Program Files"
-    elif [  -e "/mnt/c/" ] && [ "${PWD:0:7}" == "/mnt/c/" ]; then  #// if Linux on WSL2
+    elif [ -e "/mnt/c/" ] && [ "${PWD:0:7}" == "/mnt/c/" ]; then  #// if Linux on WSL2
         ScriptEnvironment="Linux"
-        if ! [[ -v USERNAME ]]; then  #// If USERNAME was not defined in parent script  #// "! -v" means that variable is not defined.
+        if [ "${USERNAME}" == "" ]; then
             export USERNAME="$( /mnt/c/WINDOWS/system32/cmd.exe /c 'echo %USERNAME%'  2> /dev/null )"
             export USERNAME="${USERNAME:0:${#USERNAME}-1}"  #// Cut last CR
         fi
