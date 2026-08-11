@@ -535,7 +535,7 @@ function  AppendSetting() {
     fi
 
     if [ "${settingName}" == "" ]; then
-        Error  "ERROR: Not specified section name ${lastOfErrorMessage}"
+        Error  "ERROR: Not specified section name (.ini file section) or codediff tag (#codediff:) ${lastOfErrorMessage}"
     elif [ "${localFullPath}" != "" ]; then
         if [ "${localFullPath:0:1}" != "/" ]; then
             Error  "ERROR: LocalPath must be full path ${lastOfErrorMessage}"
