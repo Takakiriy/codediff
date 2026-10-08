@@ -940,14 +940,14 @@ function  gitInitOption() {
 #section: Others
 
 function  LessThanVersion() {
-    # LessThanVersion
-    #     if [ "$( LessThanVersion "$(git --version)" "2.31.1")" == "${True}" ]; then
+    # Example:
+    #     if [ "$( LessThanVersion "$(git --version  |  awk  '{print $NF}' )" "2.31.1")" == "${True}" ]; then
     local  textContainsVersionA="$1"
     local  textContainsVersionB="$2"
-    local  isGoodFormat="${True}"
-    echo "${textContainsVersionA}" | grep -e "[0-9]\+\.[0-9]\+\.[0-9]\+" > /dev/null  ||  isGoodFormat="${False}"
-    echo "${textContainsVersionB}" | grep -e "[0-9]\+\.[0-9]\+\.[0-9]\+" > /dev/null  ||  isGoodFormat="${False}"
-    if [ "${isGoodFormat}" == "${False}" ]; then
+    local  isGoodFormat="true"
+    echo "${textContainsVersionA}" | grep -E '[0-9]+.[0-9]+.[0-9]+' > /dev/null  ||  isGoodFormat="false"
+    echo "${textContainsVersionB}" | grep -E '[0-9]+.[0-9]+.[0-9]+' > /dev/null  ||  isGoodFormat="false"
+    if [ "${isGoodFormat}" == "false" ]; then
         Error  "\"${textContainsVersionA}\" or \"${textContainsVersionB}\" is not semantic version."
     fi
 
